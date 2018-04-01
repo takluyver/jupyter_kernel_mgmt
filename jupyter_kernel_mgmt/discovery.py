@@ -165,3 +165,11 @@ class KernelFinder(object):
             if provider_id == provider.id:
                 return provider.launch_async(kernel_id, cwd)
         raise KeyError(provider_id)
+
+def main():
+    kf = KernelFinder.from_entrypoints()
+    for type_id, info in kf.find_kernels():
+        print(type_id)
+
+if __name__ == '__main__':
+    main()

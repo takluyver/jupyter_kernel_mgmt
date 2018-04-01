@@ -11,10 +11,10 @@ from .client2 import BlockingKernelClient2
 from .manager2 import shutdown
 
 class KernelApp(JupyterApp):
-    """Launch a kernel by name in a local subprocess.
+    """Launch a kernel by kernel type ID
     """
     version = __version__
-    description = "Run a kernel locally in a subprocess"
+    description = "Run a kernel by kernel type ID"
 
     aliases = {
         'kernel': 'KernelApp.kernel_name',

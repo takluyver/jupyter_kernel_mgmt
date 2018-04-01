@@ -14,30 +14,16 @@ import zmq
 
 from ipython_genutils.py3compat import string_types, iteritems
 from traitlets.log import get_logger as get_app_logger
-from .channels import major_protocol_version, HBChannel
-from .session import Session
+from jupyter_protocol.messages import Message
+from jupyter_protocol.sockets import ClientMessaging
+from jupyter_protocol._version import protocol_version_info
+from .manager2 import KernelManager2ABC
 from .util import inherit_docstring
 
-try:
-    monotonic = time.monotonic
-except AttributeError:
-    # py2
-    monotonic = time.time # close enough
+monotonic = time.monotonic
 
-try:
-    TimeoutError
-except NameError:
-    # py2
-    TimeoutError = RuntimeError
+major_protocol_version = protocol_version_info[0]
 
-
-channel_socket_types = {
-    'hb' : zmq.REQ,
-    'shell' : zmq.DEALER,
-    'iopub' : zmq.SUB,
-    'stdin' : zmq.DEALER,
-    'control': zmq.DEALER,
-}
 
 # some utilities to validate message structure, these might get moved elsewhere
 # if they prove to have more generic utility
@@ -52,6 +38,100 @@ def validate_string_dict(dct):
         if not isinstance(v, string_types):
             raise ValueError('value %r in dict must be a string' % v)
 
+class ManagerClient(KernelManager2ABC):
+    def __init__(self, messaging, connection_info):
+        self.messaging = messaging
+        self.connection_info = connection_info
+
+    def is_alive(self):
+        """Check whether the kernel is currently alive (e.g. the process exists)
+        """
+        msg = Message.from_type('is_alive_request', {})
+        self.messaging.send('nanny_control', msg)
+
+        while True:
+            self.messaging.nanny_control_socket.poll()
+            reply = self.messaging.recv('nanny_control')
+            if reply.parent_header['msg_id'] == msg.header['msg_id']:
+                return reply.content['alive']
+
+    def wait(self, timeout):
+        """Wait for the kernel process to exit.
+
+        If timeout is a number, it is a maximum time in seconds to wait.
+        timeout=None means wait indefinitely.
+
+        Returns True if the kernel is still alive after waiting, False if it
+        exited (like is_alive()).
+        """
+        if timeout is not None:
+            deadline = monotonic() + timeout
+        else:
+            deadline = 0
+        # First check if the kernel is alive, in case it died before we got
+        # any messages.
+        if not self.is_alive():
+            return False
+
+        if timeout is None:
+            while True:
+                self.messaging.nanny_events_socket.poll()
+                reply = self.messaging.recv('nanny_events')
+                if reply.header['msg_type'] == 'kernel_died':
+                    return False
+
+        timeout = deadline - monotonic()
+        events_socket = self.messaging.nanny_events_socket
+        while timeout > 0:
+            ready = events_socket.poll(timeout=timeout*1000)
+            if ready:
+                msg = self.messaging.recv('nanny_events')
+                if msg.header['msg_type'] == 'kernel_died':
+                    return False
+            timeout = deadline - monotonic()
+
+        return True
+
+    def signal(self, signum):
+        """Send a signal to the kernel."""
+        raise NotImplementedError
+
+    def interrupt(self):
+        """Interrupt the kernel by sending it a signal or similar event
+
+        Kernels can request to get interrupts as messages rather than signals.
+        The manager is *not* expected to handle this.
+        :meth:`.KernelClient2.interrupt` should send an interrupt_request or
+        call this method as appropriate.
+        """
+        msg = Message.from_type('interrupt_request', {})
+        self.messaging.send('nanny_control', msg)
+
+    def kill(self):
+        """Forcibly terminate the kernel.
+
+        This method may be used to dispose of a kernel that won't shut down.
+        Working kernels should usually be shut down by sending shutdown_request
+        from a client and giving it some time to clean up.
+        """
+        msg = Message.from_type('kill_request', {})
+        self.messaging.send('nanny_control', msg)
+
+    def get_connection_info(self):
+        """Return a dictionary of connection information"""
+        return self.connection_info
+
+    def relaunch(self):
+        """Attempt to relaunch the kernel using the same ports.
+
+        This is meant to be called after the managed kernel has died. Calling
+        it while the kernel is still alive has undefined behaviour.
+
+        Returns True if this manager supports that.
+        """
+        return False
+
+
 class KernelClient2(object):
     """Communicates with a single kernel on any host via zmq channels.
 
@@ -64,23 +144,19 @@ class KernelClient2(object):
 
     def __init__(self, connection_info, manager=None, use_heartbeat=True):
         self.connection_info = connection_info
-        self.manager = manager
-        self.using_heartbeat = use_heartbeat and (manager is not None)
-        self.context = zmq.Context.instance()
-        self.session = Session(key=connection_info['key'].encode('ascii'),
-                           signature_scheme=connection_info['signature_scheme'])
+        self.messaging = ClientMessaging(connection_info)
+        if (manager is None) and 'nanny_control_port' in connection_info:
+            self.manager = ManagerClient(self.messaging, connection_info)
+        else:
+            self.manager = manager
+
+        self.session = self.messaging.session
         self.log = get_app_logger()
 
-        identity = self.session.bsession
-        self.iopub_socket = self._create_connected_socket('iopub', identity)
-        self.iopub_socket.setsockopt(zmq.SUBSCRIBE, b'')
-        self.shell_socket = self._create_connected_socket('shell', identity)
-        self.stdin_socket = self._create_connected_socket('stdin', identity)
-        self.control_socket = self._create_connected_socket('control', identity)
-        if self.using_heartbeat:
-            self.hb_monitor = HBChannel(context=self.context,
-                                        address=self._make_url('hb'))
-            self.hb_monitor.start()
+        # if self.using_heartbeat:
+        #     self.hb_monitor = HBChannel(context=self.context,
+        #                                 address=self._make_url('hb'))
+        #     self.hb_monitor.start()
 
     @property
     def owned_kernel(self):
@@ -92,39 +168,12 @@ class KernelClient2(object):
 
         After calling this, the client can no longer be used.
         """
-        self.iopub_socket.close()
-        self.shell_socket.close()
-        self.stdin_socket.close()
-        self.control_socket.close()
+        self.messaging.close()
         if self.hb_monitor:
             self.hb_monitor.stop()
 
     # flag for whether execute requests should be allowed to call raw_input:
     allow_stdin = True
-
-    def _make_url(self, channel):
-        """Make a ZeroMQ URL for a given channel."""
-        transport = self.connection_info['transport']
-        ip = self.connection_info['ip']
-        port = self.connection_info['%s_port' % channel]
-
-        if transport == 'tcp':
-            return "tcp://%s:%i" % (ip, port)
-        else:
-            return "%s://%s-%s" % (transport, ip, port)
-
-    def _create_connected_socket(self, channel, identity=None):
-        """Create a zmq Socket and connect it to the kernel."""
-        url = self._make_url(channel)
-        socket_type = channel_socket_types[channel]
-        self.log.debug("Connecting to: %s" % url)
-        sock = self.context.socket(socket_type)
-        # set linger to 1s to prevent hangs at exit
-        sock.linger = 1000
-        if identity:
-            sock.identity = identity
-        sock.connect(url)
-        return sock
 
     def is_alive(self):
         if self.owned_kernel:
@@ -192,7 +241,7 @@ class KernelClient2(object):
                        allow_stdin=allow_stdin, stop_on_error=stop_on_error
                        )
         msg = self.session.msg('execute_request', content, header=_header)
-        self._send(self.shell_socket, msg)
+        self.messaging.send('shell', msg)
         return msg['header']['msg_id']
 
     def complete(self, code, cursor_pos=None, _header=None):
@@ -215,7 +264,7 @@ class KernelClient2(object):
             cursor_pos = len(code)
         content = dict(code=code, cursor_pos=cursor_pos)
         msg = self.session.msg('complete_request', content, header=_header)
-        self._send(self.shell_socket, msg)
+        self.messaging.send('shell', msg)
         return msg['header']['msg_id']
 
     def inspect(self, code, cursor_pos=None, detail_level=0, _header=None):
@@ -244,7 +293,7 @@ class KernelClient2(object):
                        detail_level=detail_level,
                        )
         msg = self.session.msg('inspect_request', content, header=_header)
-        self._send(self.shell_socket, msg)
+        self.messaging.send('shell', msg)
         return msg['header']['msg_id']
 
     def history(self, raw=True, output=False, hist_access_type='range',
@@ -287,7 +336,7 @@ class KernelClient2(object):
                        hist_access_type=hist_access_type,
                        **kwargs)
         msg = self.session.msg('history_request', content, header=_header)
-        self._send(self.shell_socket, msg)
+        self.messaging.send('shell', msg)
         return msg['header']['msg_id']
 
     def kernel_info(self, _header=None):
@@ -298,7 +347,7 @@ class KernelClient2(object):
         The msg_id of the message sent
         """
         msg = self.session.msg('kernel_info_request', header=_header)
-        self._send(self.shell_socket, msg)
+        self.messaging.send('shell', msg)
         return msg['header']['msg_id']
 
     def comm_info(self, target_name=None, _header=None):
@@ -313,7 +362,7 @@ class KernelClient2(object):
         else:
             content = dict(target_name=target_name)
         msg = self.session.msg('comm_info_request', content, header=_header)
-        self._send(self.shell_socket, msg)
+        self.messaging.send('shell', msg)
         return msg['header']['msg_id']
 
     def _handle_kernel_info_reply(self, msg):
@@ -345,14 +394,14 @@ class KernelClient2(object):
         # this should probably be done that way, but for now this will do.
         msg = self.session.msg('shutdown_request', {'restart': restart},
                                header=_header)
-        self._send(self.shell_socket, msg)
+        self.messaging.send('shell', msg)
         return msg['header']['msg_id']
 
     def is_complete(self, code, _header=None):
         """Ask the kernel whether some code is complete and ready to execute."""
         msg = self.session.msg('is_complete_request', {'code': code},
                                header=_header)
-        self._send(self.shell_socket, msg)
+        self.messaging.send('shell', msg)
         return msg['header']['msg_id']
 
     def interrupt(self, _header=None):
@@ -361,7 +410,7 @@ class KernelClient2(object):
         if mode == 'message':
             msg = self.session.msg("interrupt_request", content={},
                                    header=_header)
-            self._send(self.control_socket, msg)
+            self.messaging.send('shell', msg)
             return msg['header']['msg_id']
         elif self.owned_kernel:
             self.manager.interrupt()
@@ -377,8 +426,19 @@ class KernelClient2(object):
         content = dict(value=string)
         msg = self.session.msg('input_reply', content,
                                header=_header, parent=parent)
-        self._send(self.stdin_socket, msg)
+        self.messaging.send('stdin', msg)
 
+    @property
+    def shell_socket(self):  # For convenience
+        return self.messaging.sockets['shell']
+
+    @property
+    def iopub_socket(self):
+        return self.messaging.sockets['iopub']
+
+    @property
+    def stdin_socket(self):
+        return self.messaging.sockets['stdin']
 
 def reqrep(meth):
     def wrapped(self, *args, **kwargs):
@@ -553,8 +613,8 @@ class BlockingKernelClient2(KernelClient2):
 
         # only send stdin reply if there *was not* another request
         # or execution finished while we were reading.
-        if not (self.stdin_socket.poll(timeout=0)
-                or self.shell_socket.poll(timeout=0)):
+        if not (self.messaging.stdin_socket.poll(timeout=0)
+                or self.messaging.shell_socket.poll(timeout=0)):
             self.input(raw_data)
 
     def _output_hook_default(self, msg):
@@ -675,9 +735,9 @@ class BlockingKernelClient2(KernelClient2):
             deadline = None
 
         poller = zmq.Poller()
-        poller.register(self.iopub_socket, zmq.POLLIN)
+        poller.register(self.messaging.iopub_socket, zmq.POLLIN)
         if allow_stdin:
-            poller.register(self.stdin_socket, zmq.POLLIN)
+            poller.register(self.messaging.stdin_socket, zmq.POLLIN)
 
         # wait for output and redisplay it
         while True:
@@ -687,11 +747,11 @@ class BlockingKernelClient2(KernelClient2):
             events = dict(poller.poll(timeout_ms))
             if not events:
                 raise TimeoutError("Timeout waiting for output")
-            if self.stdin_socket in events:
+            if self.messaging.stdin_socket in events:
                 req = self.get_stdin_msg(timeout=0)
                 stdin_hook(req)
                 continue
-            if self.iopub_socket not in events:
+            if self.messaging.iopub_socket not in events:
                 continue
 
             msg = self.get_iopub_msg(timeout=0)

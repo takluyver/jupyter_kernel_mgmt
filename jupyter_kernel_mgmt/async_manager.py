@@ -1,6 +1,5 @@
 """Launch and control kernels using asyncio.
 """
-# noinspection PyCompatibility
 import asyncio
 import os
 
@@ -13,7 +12,6 @@ from .localinterfaces import is_local_ip, local_ips, localhost
 from .manager2 import KernelManager2, KernelManager2ABC
 from .util import inherit_docstring
 
-# noinspection PyCompatibility
 class AsyncPopenKernelManager(KernelManager2):
     """Run a kernel asynchronously in a subprocess.
 
@@ -127,7 +125,7 @@ class AsyncPopenKernelManager(KernelManager2):
         self.kernel.stdin.close()
         self._exit_future = asyncio.ensure_future(self.kernel.wait())
 
-# noinspection PyCompatibility
+
 @asyncio.coroutine
 def shutdown(client, manager, wait_time=5.0):
     """Shutdown a kernel using a client and a manager.
@@ -143,7 +141,7 @@ def shutdown(client, manager, wait_time=5.0):
         manager.kill()
     manager.cleanup()
 
-# noinspection PyCompatibility
+
 @asyncio.coroutine
 def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None):
     """Start a new kernel, and return its Manager and a blocking client"""
