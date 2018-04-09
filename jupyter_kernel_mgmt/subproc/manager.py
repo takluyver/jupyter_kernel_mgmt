@@ -5,7 +5,6 @@
 
 from __future__ import absolute_import
 
-from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 import logging
 import os
@@ -19,76 +18,11 @@ log = logging.getLogger(__name__)
 
 from traitlets.log import get_logger as get_app_logger
 
-from .launcher2 import (
+from .launcher import (
     make_connection_file, build_popen_kwargs, prepare_interrupt_event
 )
-from .localinterfaces import is_local_ip, local_ips, localhost
-
-
-class KernelManager2ABC(six.with_metaclass(ABCMeta, object)):
-    @abstractmethod
-    def is_alive(self):
-        """Check whether the kernel is currently alive (e.g. the process exists)
-        """
-        pass
-
-    @abstractmethod
-    def wait(self, timeout):
-        """Wait for the kernel process to exit.
-
-        If timeout is a number, it is a maximum time in seconds to wait.
-        timeout=None means wait indefinitely.
-
-        Returns True if the kernel is still alive after waiting, False if it
-        exited (like is_alive()).
-        """
-        pass
-
-    @abstractmethod
-    def signal(self, signum):
-        """Send a signal to the kernel."""
-        pass
-
-    @abstractmethod
-    def interrupt(self):
-        """Interrupt the kernel by sending it a signal or similar event
-
-        Kernels can request to get interrupts as messages rather than signals.
-        The manager is *not* expected to handle this.
-        :meth:`.KernelClient2.interrupt` should send an interrupt_request or
-        call this method as appropriate.
-        """
-        pass
-
-    @abstractmethod
-    def kill(self):
-        """Forcibly terminate the kernel.
-
-        This method may be used to dispose of a kernel that won't shut down.
-        Working kernels should usually be shut down by sending shutdown_request
-        from a client and giving it some time to clean up.
-        """
-        pass
-
-    def cleanup(self):
-        """Clean up any resources, such as files created by the manager."""
-        pass
-
-    @abstractmethod
-    def get_connection_info(self):
-        """Return a dictionary of connection information"""
-        pass
-
-    @abstractmethod
-    def relaunch(self):
-        """Attempt to relaunch the kernel using the same ports.
-
-        This is meant to be called after the managed kernel has died. Calling
-        it while the kernel is still alive has undefined behaviour.
-
-        Returns True if this manager supports that.
-        """
-        pass
+from ..localinterfaces import is_local_ip, local_ips, localhost
+from ..managerabc import KernelManager2ABC
 
 
 class KernelManager2(KernelManager2ABC):

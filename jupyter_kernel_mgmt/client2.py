@@ -17,7 +17,7 @@ from traitlets.log import get_logger as get_app_logger
 from jupyter_protocol.messages import Message
 from jupyter_protocol.sockets import ClientMessaging
 from jupyter_protocol._version import protocol_version_info
-from .manager2 import KernelManager2ABC
+from .managerabc import KernelManager2ABC
 from .util import inherit_docstring
 
 monotonic = time.monotonic

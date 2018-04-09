@@ -4,7 +4,7 @@ import logging
 import six
 
 from .kernelspec import KernelSpecManager
-from .manager2 import KernelManager2
+from .subproc.manager import KernelManager2
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class KernelSpecProvider(KernelProviderBase):
         return KernelManager2(kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd)
 
     def launch_async(self, name, cwd=None):
-        from .async_manager import AsyncPopenKernelManager
+        from .subproc.async_manager import AsyncPopenKernelManager
         spec = self.ksm.get_kernel_spec(name)
         return AsyncPopenKernelManager.launch(
             kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd)
@@ -103,7 +103,7 @@ class IPykernelProvider(KernelProviderBase):
                               cwd=cwd)
 
     def launch_async(self, name, cwd=None):
-        from .async_manager import AsyncPopenKernelManager
+        from .subproc.async_manager import AsyncPopenKernelManager
         info = self._check_for_kernel()
         if info is None:
             raise Exception("ipykernel is not importable")
