@@ -12,8 +12,8 @@ import time
 from unittest import TestCase
 
 from ipykernel.kernelspec import make_ipkernel_cmd
-from jupyter_client.manager2 import (
-    KernelManager2, run_kernel, start_new_kernel, shutdown
+from jupyter_kernel_mgmt.subproc.manager import (
+    KernelManager2, run_kernel, start_new_kernel
 )
 from .utils import test_env, skip_win32
 
@@ -83,4 +83,4 @@ class TestKernelManager(TestCase):
             self.assertTrue(km.is_alive())
             self.assertTrue(kc.is_alive())
         finally:
-            shutdown(kc, km)
+            kc.shutdown_or_terminate()

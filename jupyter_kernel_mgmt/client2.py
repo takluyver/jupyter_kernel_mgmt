@@ -594,6 +594,20 @@ class BlockingKernelClient2(KernelClient2):
         else:
             return msg_id
 
+    def shutdown_or_terminate(self, timeout=5.0):
+        """Ask the kernel to shut down, and terminate it if it takes too long.
+
+        The kernel will be given up to timeout seconds to shut itself down.
+        """
+        if not self.manager:
+            raise RuntimeError("Cannot terminate a kernel without a KernelManager")
+        self.shutdown()
+        if self.manager.wait(timeout):
+            # OK, we've waited long enough.
+            self.log.debug("Kernel is taking too long to finish, killing")
+            self.manager.kill()
+        self.manager.cleanup()
+
     def _stdin_hook_default(self, msg):
         """Handle an input request"""
         content = msg['content']

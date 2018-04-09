@@ -202,23 +202,10 @@ class IPCKernelManager2(KernelManager2):
 
         super(IPCKernelManager2, self).cleanup()
 
-def shutdown(client, manager, wait_time=5.0):
-    """Shutdown a kernel using a client and a manager.
-
-    Attempts a clean shutdown by sending a shutdown message. If the kernel
-    hasn't exited in wait_time seconds, it will be killed. Set wait_time=None
-    to wait indefinitely.
-    """
-    client.shutdown()
-    if manager.wait(wait_time):
-        # OK, we've waited long enough.
-        log.debug("Kernel is taking too long to finish, killing")
-        manager.kill()
-    manager.cleanup()
 
 def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None):
     """Start a new kernel, and return its Manager and a blocking client"""
-    from .client2 import BlockingKernelClient2
+    from ..client2 import BlockingKernelClient2
     cwd = cwd or os.getcwd()
 
     km = KernelManager2(kernel_cmd, cwd=cwd)
@@ -226,7 +213,7 @@ def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None):
     try:
         kc.wait_for_ready(timeout=startup_timeout)
     except RuntimeError:
-        shutdown(kc, km)
+        kc.shutdown_or_terminate()
         kc.close()
         raise
 
@@ -246,5 +233,5 @@ def run_kernel(kernel_cmd, **kwargs):
     try:
         yield kc
     finally:
-        shutdown(kc, km)
+        kc.shutdown_or_terminate()
         kc.close()

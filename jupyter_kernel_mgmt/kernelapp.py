@@ -46,8 +46,9 @@ class KernelApp(JupyterApp):
 
     def shutdown(self, signo):
         self.log.info('Shutting down on signal %d' % signo)
-        client = BlockingKernelClient2(self.manager.get_connection_info())
-        shutdown(client, self.manager)
+        client = BlockingKernelClient2(self.manager.get_connection_info(),
+                                       manager=self.manager)
+        client.shutdown_or_terminate()
         client.close()
         self.loop.stop()
 
