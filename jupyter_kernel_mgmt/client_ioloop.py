@@ -1,8 +1,10 @@
 import atexit
+from datetime import timedelta
 import errno
-from functools import partial
+from functools import partial, wraps
 from threading import Thread, Event
 from tornado.concurrent import Future
+from tornado import gen
 from zmq import ZMQError
 from zmq.eventloop import ioloop, zmqstream
 
@@ -26,8 +28,8 @@ class IOLoopKernelClient(KernelClient):
     Use ClientInThread to run this in a separate thread alongside your
     application.
     """
-    def __init__(self, connection_info, **kwargs):
-        super(IOLoopKernelClient, self).__init__(connection_info, **kwargs)
+    def __init__(self, connection_info, manager=None):
+        super(IOLoopKernelClient, self).__init__(connection_info, manager)
         self.ioloop = ioloop.IOLoop.current()
         self.request_futures = {}
         self.handlers = {
@@ -77,13 +79,12 @@ class IOLoopKernelClient(KernelClient):
                 else:
                     parent_future.set_result(msg)
 
-    def _handle_recv(self, channel, msg):
+    def _handle_recv(self, channel, wire_msg):
         """Callback for stream.on_recv.
 
         Unpacks message, and calls handlers with it.
         """
-        ident, smsg = self.session.feed_identities(msg)
-        msg = self.session.deserialize(smsg)
+        msg = self.session.deserialize(wire_msg)
         self._call_handlers(channel, msg)
 
     def _call_handlers(self, channel, msg):
@@ -166,6 +167,22 @@ class IOLoopKernelClient(KernelClient):
         msg_id = super().shutdown(restart, _header=_header)
         return self._request_future(msg_id)
 
+    @gen.coroutine
+    def shutdown_or_terminate(self, timeout=5.0):
+        """Ask the kernel to shut down, and terminate it if it takes too long.
+
+        The kernel will be given up to timeout seconds to shut itself down.
+        """
+        if not self.manager:
+            raise RuntimeError(
+                "Cannot terminate a kernel without a KernelManager")
+        try:
+            yield gen.with_timeout(timedelta(seconds=timeout), self.shutdown())
+        except TimeoutError:
+            self.log.debug("Kernel is taking too long to finish, killing")
+            self.manager.kill()
+        self.manager.cleanup()
+
     def is_complete(self, code, _header=None):
         """Ask the kernel whether some code is complete and ready to execute."""
         msg_id = super().is_complete(code, _header=_header)
@@ -175,12 +192,42 @@ class IOLoopKernelClient(KernelClient):
         """Send an interrupt message/signal to the kernel"""
         mode = self.connection_info.get('interrupt_mode', 'signal')
         if mode == 'message':
-            msg_id = super().interrupt()
-            return self._request_future(msg_id, _header=_header)
+            msg_id = super().interrupt(_header=_header)
+            return self._request_future(msg_id)
         elif self.owned_kernel:
             self.manager.interrupt()
         else:
             self.log.warning("Can't send signal to non-owned kernel")
+            f = Future()
+            f.set_result(None)
+            return f
+
+def waiting_for_reply(method):
+    @wraps(method)
+    def wrapped(self, *args, timeout=None, **kwargs):
+        loop = self.loop_client.ioloop
+        return loop.run_sync(lambda: method(self.loop_client, *args, **kwargs),
+                                    timeout=timeout)
+
+    return wrapped
+
+class BlockingKernelClient:
+    def __init__(self, connection_info, manager=None):
+        self.connection_info = connection_info
+        self.loop_client = IOLoopKernelClient(connection_info, manager)
+
+    # Methods to send specific messages.
+    # These requests run the IOLoop until their reply arrives
+    execute = waiting_for_reply(IOLoopKernelClient.execute)
+    complete = waiting_for_reply(IOLoopKernelClient.complete)
+    inspect = waiting_for_reply(IOLoopKernelClient.inspect)
+    history = waiting_for_reply(IOLoopKernelClient.history)
+    kernel_info = waiting_for_reply(IOLoopKernelClient.kernel_info)
+    comm_info = waiting_for_reply(IOLoopKernelClient.comm_info)
+    shutdown = waiting_for_reply(IOLoopKernelClient.shutdown)
+    is_complete = waiting_for_reply(IOLoopKernelClient.is_complete)
+    interrupt = waiting_for_reply(IOLoopKernelClient.interrupt)
+    shutdown_or_terminate = waiting_for_reply(IOLoopKernelClient.shutdown_or_terminate)
 
 class ClientInThread(Thread):
     """Run an IOLoopKernelClient2 in a separate thread.
