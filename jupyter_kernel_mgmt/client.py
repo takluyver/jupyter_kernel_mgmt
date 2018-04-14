@@ -1,186 +1,322 @@
-"""Base class to manage the interaction with a running kernel"""
-
-# Copyright (c) Jupyter Development Team.
-# Distributed under the terms of the Modified BSD License.
-
-from __future__ import absolute_import, print_function
-
-from functools import partial
+import atexit
+from datetime import timedelta
+import errno
+from functools import partial, wraps
 from getpass import getpass
-from six.moves import input
 import sys
-import time
+from threading import Thread, Event
+from tornado.concurrent import Future
+from tornado import gen
 import zmq
+from zmq import ZMQError
+from zmq.eventloop import ioloop, zmqstream
 
-from traitlets.log import get_logger as get_app_logger
-from jupyter_protocol.messages import (
-    Message, execute_request, complete_request, inspect_request,
-    history_request, kernel_info_request, comm_info_request, shutdown_request,
-    is_complete_request, interrupt_request, input_reply,
-)
-from jupyter_protocol.sockets import ClientMessaging
-from jupyter_protocol._version import protocol_version_info
-from .managerabc import KernelManagerABC
+from .client_base import KernelClient
 from .util import inherit_docstring
 
-monotonic = time.monotonic
 
-major_protocol_version = protocol_version_info[0]
+class ErrorInKernel(Exception):
+    def __init__(self, ename, evalue, traceback):
+        self.ename = ename
+        self.evalue = evalue
+        self.traceback = traceback
 
+    def __str__(self):
+        return '\n'.join(self.traceback
+                         + ['{}: {}'.format(self.ename,  self.evalue)])
 
-class ManagerClient(KernelManagerABC):
-    def __init__(self, messaging, connection_info):
-        self.messaging = messaging
-        self.connection_info = connection_info
+class IOLoopKernelClient(KernelClient):
+    """Uses a zmq/tornado IOLoop to handle received messages and fire callbacks.
 
-    def is_alive(self):
-        """Check whether the kernel is currently alive (e.g. the process exists)
-        """
-        msg = Message.from_type('is_alive_request', {})
-        self.messaging.send('nanny_control', msg)
-
-        while True:
-            self.messaging.nanny_control_socket.poll()
-            reply = self.messaging.recv('nanny_control')
-            if reply.parent_header['msg_id'] == msg.header['msg_id']:
-                return reply.content['alive']
-
-    def wait(self, timeout):
-        """Wait for the kernel process to exit.
-
-        If timeout is a number, it is a maximum time in seconds to wait.
-        timeout=None means wait indefinitely.
-
-        Returns True if the kernel is still alive after waiting, False if it
-        exited (like is_alive()).
-        """
-        if timeout is not None:
-            deadline = monotonic() + timeout
-        else:
-            deadline = 0
-        # First check if the kernel is alive, in case it died before we got
-        # any messages.
-        if not self.is_alive():
-            return False
-
-        if timeout is None:
-            while True:
-                self.messaging.nanny_events_socket.poll()
-                reply = self.messaging.recv('nanny_events')
-                if reply.header['msg_type'] == 'kernel_died':
-                    return False
-
-        timeout = deadline - monotonic()
-        events_socket = self.messaging.nanny_events_socket
-        while timeout > 0:
-            ready = events_socket.poll(timeout=timeout*1000)
-            if ready:
-                msg = self.messaging.recv('nanny_events')
-                if msg.header['msg_type'] == 'kernel_died':
-                    return False
-            timeout = deadline - monotonic()
-
-        return True
-
-    def signal(self, signum):
-        """Send a signal to the kernel."""
-        raise NotImplementedError
-
-    def interrupt(self):
-        """Interrupt the kernel by sending it a signal or similar event
-
-        Kernels can request to get interrupts as messages rather than signals.
-        The manager is *not* expected to handle this.
-        :meth:`.KernelClient2.interrupt` should send an interrupt_request or
-        call this method as appropriate.
-        """
-        msg = Message.from_type('interrupt_request', {})
-        self.messaging.send('nanny_control', msg)
-
-    def kill(self):
-        """Forcibly terminate the kernel.
-
-        This method may be used to dispose of a kernel that won't shut down.
-        Working kernels should usually be shut down by sending shutdown_request
-        from a client and giving it some time to clean up.
-        """
-        msg = Message.from_type('kill_request', {})
-        self.messaging.send('nanny_control', msg)
-
-    def get_connection_info(self):
-        """Return a dictionary of connection information"""
-        return self.connection_info
-
-    def relaunch(self):
-        """Attempt to relaunch the kernel using the same ports.
-
-        This is meant to be called after the managed kernel has died. Calling
-        it while the kernel is still alive has undefined behaviour.
-
-        Returns True if this manager supports that.
-        """
-        return False
-
-
-class KernelClient(object):
-    """Communicates with a single kernel on any host via zmq channels.
-
-    The messages that can be sent are exposed as methods of the
-    client (KernelClient2.execute, complete, history, etc.). These methods only
-    send the message, they don't wait for a reply. To get results, use e.g.
-    :meth:`get_shell_msg` to fetch messages from the shell channel.
+    Use ClientInThread to run this in a separate thread alongside your
+    application.
     """
-    hb_monitor = None
-
-    def __init__(self, connection_info, manager=None, use_heartbeat=True):
-        self.connection_info = connection_info
-        self.messaging = ClientMessaging(connection_info)
-        if (manager is None) and 'nanny_control_port' in connection_info:
-            self.manager = ManagerClient(self.messaging, connection_info)
-        else:
-            self.manager = manager
-
-        self.session = self.messaging.session
-        self.log = get_app_logger()
-
-        # if self.using_heartbeat:
-        #     self.hb_monitor = HBChannel(context=self.context,
-        #                                 address=self._make_url('hb'))
-        #     self.hb_monitor.start()
-
-    @property
-    def owned_kernel(self):
-        """True if this client 'owns' the kernel, i.e. started it."""
-        return self.manager is not None
+    def __init__(self, connection_info, manager=None):
+        super(IOLoopKernelClient, self).__init__(connection_info, manager)
+        self.ioloop = ioloop.IOLoop.current()
+        self.request_futures = {}
+        self.handlers = {
+            'iopub': [],
+            'shell': [self._auto_adapt, self._fulfil_request],
+            'stdin': [],
+            'control': [self._fulfil_request],
+        }
+        self.streams = {}
+        for channel, socket in self.messaging.sockets.items():
+            self.streams[channel] = s = zmqstream.ZMQStream(socket, self.ioloop)
+            s.on_recv(partial(self._handle_recv, channel))
 
     def close(self):
-        """Close sockets of this client.
+        """Close the client's sockets & streams.
 
-        After calling this, the client can no longer be used.
+        This does not close the IOLoop.
         """
-        self.messaging.close()
+        for stream in self.streams.values():
+            stream.close()
         if self.hb_monitor:
             self.hb_monitor.stop()
 
-    # flag for whether execute requests should be allowed to call raw_input:
-    allow_stdin = True
+    def _auto_adapt(self, msg):
+        """Use the first kernel_info_reply to set up protocol version adaptation
+        """
+        if msg.header['msg_type'] == 'kernel_info_reply':
+            self._handle_kernel_info_reply(msg)
+            self.remove_handler('shell', self._auto_adapt)
 
-    def is_alive(self):
-        if self.owned_kernel:
-            return self.manager.is_alive()
-        elif self.using_heartbeat:
-            return self.hb_monitor.is_beating()
-        else:
-            return True  # Fingers crossed
+    def _request_future(self, msg_id):
+        self.request_futures[msg_id] = f = Future()
+        return f
 
-    def _send(self, socket, msg):
-        self.session.send(socket, msg)
+    def _fulfil_request(self, msg):
+        """If msg is a reply, set the result for the request future."""
+        if msg.header['msg_type'].endswith('_reply'):
+            parent_id = msg.parent_header.get('msg_id')
+            parent_future = self.request_futures.pop(parent_id, None)
+            if parent_future:
+                if msg.content.get('status', 'ok') == 'error':
+                    e = ErrorInKernel(msg.content.get('ename', 'ERROR'),
+                                      msg.content.get('evalue', ''),
+                                      msg.content.get('traceback', [])
+                                     )
+                    parent_future.set_exception(e)
+                else:
+                    parent_future.set_result(msg)
 
-    # Methods to send specific messages on channels
+    def _handle_recv(self, channel, wire_msg):
+        """Callback for stream.on_recv.
+
+        Unpacks message, and calls handlers with it.
+        """
+        msg = self.session.deserialize(wire_msg)
+        self._call_handlers(channel, msg)
+
+    def _call_handlers(self, channel, msg):
+        # [:] copies the list - handlers that remove themselves (or add other
+        # handlers) will not mess up iterating over it.
+        for handler in self.handlers[channel][:]:
+            try:
+                handler(msg)
+            except Exception as e:
+                self.log.error("Exception from message handler %r", handler,
+                               exc_info=e)
+
+    def add_handler(self, channel, handler):
+        """Add a callback for received messages on one channel.
+
+        Parameters
+        ----------
+
+        channel : str
+          One of 'shell', 'iopub', 'stdin' or 'control'
+        handler : function
+          Will be called for each message received with the message dictionary
+          as a single argument.
+        """
+        self.handlers[channel].append(handler)
+
+    def remove_handler(self, channel, handler):
+        """Remove a previously registered callback."""
+        self.handlers[channel].remove(handler)
+
+    # Methods to send specific messages.
+    # These requests all return a Future, which completes when the reply arrives
     def execute(self, code, silent=False, store_history=True,
                 user_expressions=None, allow_stdin=None, stop_on_error=True,
                 _header=None):
-        """Execute code in the kernel.
+        msg_id = super().execute(code, silent=silent, store_history=store_history,
+              user_expressions=user_expressions, allow_stdin=allow_stdin,
+              stop_on_error=stop_on_error, _header=_header)
+        return self._request_future(msg_id)
+
+    def complete(self, code, cursor_pos=None, _header=None):
+        """Tab complete text in the kernel's namespace.
+
+        Parameters
+        ----------
+        code : str
+            The context in which completion is requested.
+            Can be anything between a variable name and an entire cell.
+        cursor_pos : int, optional
+            The position of the cursor in the block of code where the completion was requested.
+            Default: ``len(code)``
+
+        Returns
+        -------
+        The msg_id of the message sent.
+        """
+        msg_id = super().complete(code, cursor_pos=cursor_pos, _header=_header)
+        return self._request_future(msg_id)
+
+    def inspect(self, code, cursor_pos=None, detail_level=0, _header=None):
+        msg_id = super().inspect(code, cursor_pos=cursor_pos,
+                                 detail_level=detail_level, _header=_header)
+        return self._request_future(msg_id)
+
+    def history(self, raw=True, output=False, hist_access_type='range',
+                _header=None, **kwargs):
+        msg_id = super().history(raw=raw, output=output,
+                   hist_access_type=hist_access_type, _header=_header, **kwargs)
+        return self._request_future(msg_id)
+
+    def kernel_info(self, _header=None):
+        msg_id = super().kernel_info(_header=_header)
+        return self._request_future(msg_id)
+
+    def comm_info(self, target_name=None, _header=None):
+        msg_id = super().comm_info(target_name, _header=_header)
+        return self._request_future(msg_id)
+
+    def shutdown(self, restart=False, _header=None):
+        msg_id = super().shutdown(restart, _header=_header)
+        return self._request_future(msg_id)
+
+    @gen.coroutine
+    def shutdown_or_terminate(self, timeout=5.0):
+        """Ask the kernel to shut down, and terminate it if it takes too long.
+
+        The kernel will be given up to timeout seconds to shut itself down.
+        """
+        if not self.manager:
+            raise RuntimeError(
+                "Cannot terminate a kernel without a KernelManager")
+        try:
+            yield gen.with_timeout(timedelta(seconds=timeout), self.shutdown())
+        except TimeoutError:
+            self.log.debug("Kernel is taking too long to finish, killing")
+            self.manager.kill()
+        self.manager.cleanup()
+
+    def is_complete(self, code, _header=None):
+        """Ask the kernel whether some code is complete and ready to execute."""
+        msg_id = super().is_complete(code, _header=_header)
+        return self._request_future(msg_id)
+
+    def interrupt(self, _header=None):
+        """Send an interrupt message/signal to the kernel"""
+        mode = self.connection_info.get('interrupt_mode', 'signal')
+        if mode == 'message':
+            msg_id = super().interrupt(_header=_header)
+            return self._request_future(msg_id)
+        elif self.owned_kernel:
+            self.manager.interrupt()
+        else:
+            self.log.warning("Can't send signal to non-owned kernel")
+            f = Future()
+            f.set_result(None)
+            return f
+
+def waiting_for_reply(method):
+    @wraps(method)
+    def wrapped(self, *args, timeout=None, **kwargs):
+        loop = self.loop_client.ioloop
+        return loop.run_sync(lambda: method(self.loop_client, *args, **kwargs),
+                                    timeout=timeout)
+
+    if not method.__doc__:
+        # python -OO removes docstrings,
+        # so don't bother building the wrapped docstring
+        return wrapped
+
+    basedoc, _ = method.__doc__.split('Returns\n', 1)
+    parts = [basedoc.strip()]
+    if 'Parameters' not in basedoc:
+        parts.append("""
+        Parameters
+        ----------
+        """)
+    parts.append("""
+        timeout: float or None (default: None)
+            Timeout to use when waiting for a reply
+
+        Returns
+        -------
+        msg_id: str
+            The msg_id of the request sent, if reply=False (default)
+        reply: dict
+            The reply message for this request, if reply=True
+    """)
+    wrapped.__doc__ = '\n'.join(parts)
+    return wrapped
+
+
+class BlockingKernelClient:
+    def __init__(self, connection_info, manager=None):
+        self.connection_info = connection_info
+        self.loop_client = IOLoopKernelClient(connection_info, manager)
+
+    # Methods to send specific messages.
+    # These requests run the IOLoop until their reply arrives
+    execute = waiting_for_reply(IOLoopKernelClient.execute)
+    complete = waiting_for_reply(IOLoopKernelClient.complete)
+    inspect = waiting_for_reply(IOLoopKernelClient.inspect)
+    history = waiting_for_reply(IOLoopKernelClient.history)
+    kernel_info = waiting_for_reply(IOLoopKernelClient.kernel_info)
+    comm_info = waiting_for_reply(IOLoopKernelClient.comm_info)
+    shutdown = waiting_for_reply(IOLoopKernelClient.shutdown)
+    is_complete = waiting_for_reply(IOLoopKernelClient.is_complete)
+    interrupt = waiting_for_reply(IOLoopKernelClient.interrupt)
+    shutdown_or_terminate = waiting_for_reply(IOLoopKernelClient.shutdown_or_terminate)
+
+    def input(self, string, parent=None):
+        self.loop_client.input(string, parent=parent)
+
+    allow_stdin = True
+
+    def _stdin_hook_default(self, msg):
+        """Handle an input request"""
+        if msg.content.get('password', False):
+            prompt = getpass
+        else:
+            prompt = input
+
+        try:
+            raw_data = prompt(msg.content["prompt"])
+        except EOFError:
+            # turn EOFError into EOF character
+            raw_data = '\x04'
+        except KeyboardInterrupt:
+            sys.stdout.write('\n')
+            return
+
+        self.input(raw_data, parent=msg)
+
+    def _output_hook_default(self, msg):
+        """Default hook for redisplaying plain-text output"""
+        msg_type = msg.header['msg_type']
+        content = msg.content
+        if msg_type == 'stream':
+            stream = getattr(sys, content['name'])
+            stream.write(content['text'])
+        elif msg_type in ('display_data', 'execute_result'):
+            sys.stdout.write(content['data'].get('text/plain', ''))
+        elif msg_type == 'error':
+            print('\n'.join(content['traceback']), file=sys.stderr)
+
+    def _output_hook_kernel(self, session, socket, parent_header, msg):
+        """Output hook when running inside an IPython kernel
+
+        adds rich output support.
+        """
+        msg_type = msg['header']['msg_type']
+        if msg_type in ('display_data', 'execute_result', 'error'):
+            session.send(socket, msg_type, msg.content, parent=parent_header)
+        else:
+            self._output_hook_default(msg)
+
+    def execute_interactive(self, code, silent=False, store_history=True,
+                            user_expressions=None, allow_stdin=None,
+                            stop_on_error=True,
+                            timeout=None, output_hook=None, stdin_hook=None,
+                            ):
+        """Execute code in the kernel interactively
+
+        Output will be redisplayed, and stdin prompts will be relayed as well.
+        If an IPython kernel is detected, rich output will be displayed.
+
+        You can pass a custom output_hook callable that will be called
+        with every IOPub message that is produced instead of the default redisplay.
+
+        .. versionadded:: 5.0
 
         Parameters
         ----------
@@ -210,205 +346,199 @@ class KernelClient(object):
         stop_on_error: bool, optional (default True)
             Flag whether to abort the execution queue, if an exception is encountered.
 
-        Returns
-        -------
-        The msg_id of the message sent.
-        """
-        msg = execute_request(code, silent=silent, store_history=store_history,
-              user_expressions=user_expressions, allow_stdin=allow_stdin,
-              stop_on_error=stop_on_error)
-        if _header:
-            msg.header = _header
-        self.messaging.send('shell', msg)
-        return msg.header['msg_id']
+        timeout: float or None (default: None)
+            Timeout to use when waiting for a reply
 
-    def complete(self, code, cursor_pos=None, _header=None):
-        """Tab complete text in the kernel's namespace.
+        output_hook: callable(msg)
+            Function to be called with output messages.
+            If not specified, output will be redisplayed.
 
-        Parameters
-        ----------
-        code : str
-            The context in which completion is requested.
-            Can be anything between a variable name and an entire cell.
-        cursor_pos : int, optional
-            The position of the cursor in the block of code where the completion was requested.
-            Default: ``len(code)``
+        stdin_hook: callable(msg)
+            Function to be called with stdin_request messages.
+            If not specified, input/getpass will be called.
 
         Returns
         -------
-        The msg_id of the message sent.
+        reply: dict
+            The reply message for this request
         """
-        msg = complete_request(code, cursor_pos=cursor_pos)
-        if _header:
-            msg.header = _header
-        self.messaging.send('shell', msg)
-        return msg.header['msg_id']
+        if allow_stdin is None:
+            allow_stdin = self.allow_stdin
 
-    def inspect(self, code, cursor_pos=None, detail_level=0, _header=None):
-        """Get metadata information about an object in the kernel's namespace.
+        if stdin_hook is None:
+            stdin_hook = self._stdin_hook_default
+        if output_hook is None:
+            # detect IPython kernel
+            if 'IPython' in sys.modules:
+                from IPython import get_ipython
+                ip = get_ipython()
+                in_kernel = getattr(ip, 'kernel', False)
+                if in_kernel:
+                    output_hook = partial(
+                        self._output_hook_kernel,
+                        ip.display_pub.session,
+                        ip.display_pub.pub_socket,
+                        ip.display_pub.parent_header,
+                    )
+        if output_hook is None:
+            # default: redisplay plain-text outputs
+            output_hook = self._output_hook_default
 
-        It is up to the kernel to determine the appropriate object to inspect.
 
-        Parameters
-        ----------
-        code : str
-            The context in which info is requested.
-            Can be anything between a variable name and an entire cell.
-        cursor_pos : int, optional
-            The position of the cursor in the block of code where the info was requested.
-            Default: ``len(code)``
-        detail_level : int, optional
-            The level of detail for the introspection (0-2)
+        self.loop_client.add_handler('stdin', stdin_hook)
+        self.loop_client.add_handler('iopub', output_hook)
 
-        Returns
-        -------
-        The msg_id of the message sent.
+        try:
+            self.execute(code,
+                         silent=silent,
+                         store_history=store_history,
+                         user_expressions=user_expressions,
+                         allow_stdin=allow_stdin,
+                         stop_on_error=stop_on_error,
+                         timeout=timeout,
+                        )
+        finally:
+            self.loop_client.remove_handler('stdin', stdin_hook)
+            self.loop_client.remove_handler('iopub', output_hook)
+
+
+class ClientInThread(Thread):
+    """Run an IOLoopKernelClient2 in a separate thread.
+
+    The main client methods (execute, complete, etc.) all pass their arguments
+    to the ioloop thread, which sends the messages. Handlers for received
+    messages will be called in the ioloop thread, so they should typically
+    use a signal or callback mechanism to interact with the application in
+    the main thread.
+    """
+    client = None
+    _exiting = False
+
+    def __init__(self, connection_info, manager=None, loop=None):
+        super(ClientInThread, self).__init__()
+        self.daemon = True
+        self.connection_info = connection_info
+        self.manager = manager
+        self.started = Event()
+
+    @staticmethod
+    @atexit.register
+    def _notice_exit():
+        ClientInThread._exiting = True
+
+    def run(self):
+        """Run my loop, ignoring EINTR events in the poller"""
+        loop = ioloop.IOLoop(make_current=True)
+        self.client = IOLoopKernelClient(self.connection_info, manager=self.manager)
+        self.client.ioloop.add_callback(self.started.set)
+        try:
+            self._run_loop()
+        finally:
+            self.client.close()
+            self.client.ioloop.close()
+            self.client = None
+
+    def _run_loop(self):
+        while True:
+            try:
+                self.client.ioloop.start()
+            except ZMQError as e:
+                if e.errno == errno.EINTR:
+                    continue
+                else:
+                    raise
+            except Exception:
+                if self._exiting:
+                    break
+                else:
+                    raise
+            else:
+                break
+
+    @property
+    def ioloop(self):
+        if self.client:
+            return self.client.ioloop
+
+    def close(self):
+        """Shut down the client and wait for the thread to exit.
+
+        This closes the client's sockets and ioloop, and joins its thread.
         """
-        msg = inspect_request(code, cursor_pos=cursor_pos, detail_level=detail_level)
-        if _header:
-            msg.header = _header
-        self.messaging.send('shell', msg)
-        return msg.header['msg_id']
+        if self.client is not None:
+            self.ioloop.add_callback(self.client.ioloop.stop)
+            self.join()
 
-    def history(self, raw=True, output=False, hist_access_type='range',
-                _header=None, **kwargs):
-        """Get entries from the kernel's history list.
+    @inherit_docstring(IOLoopKernelClient)
+    def add_handler(self, channel, handler):
+        self.client.handlers[channel].append(handler)
 
-        Parameters
-        ----------
-        raw : bool
-            If True, return the raw input.
-        output : bool
-            If True, then return the output as well.
-        hist_access_type : str
-            'range' (fill in session, start and stop params), 'tail' (fill in n)
-             or 'search' (fill in pattern param).
+    @inherit_docstring(IOLoopKernelClient)
+    def remove_handler(self, channel, handler):
+        self.client.handlers[channel].remove(handler)
 
-        session : int
-            For a range request, the session from which to get lines. Session
-            numbers are positive integers; negative ones count back from the
-            current session.
-        start : int
-            The first line number of a history range.
-        stop : int
-            The final (excluded) line number of a history range.
+    # Client messaging methods --------------------------------
+    # These send as much work as possible to the IO thread, but we generate
+    # the header in the calling thread so we can return the message ID.
 
-        n : int
-            The number of lines of history to get for a tail request.
+    @inherit_docstring(KernelClient)
+    def execute(self, *args, **kwargs):
+        hdr = self.client.session.msg_header('execute_request')
+        self.ioloop.add_callback(self.client.execute, *args, _header=hdr, **kwargs)
+        return hdr['msg_id']
 
-        pattern : str
-            The glob-syntax pattern for a search request.
+    @inherit_docstring(KernelClient)
+    def complete(self, *args, **kwargs):
+        hdr = self.client.session.msg_header('complete_request')
+        self.ioloop.add_callback(self.client.complete, *args, _header=hdr, **kwargs)
+        return hdr['msg_id']
 
-        Returns
-        -------
-        The ID of the message sent.
-        """
-        msg = history_request(raw=raw, output=output,
-                              hist_access_type=hist_access_type, **kwargs)
-        if _header:
-            msg.header = _header
-        self.messaging.send('shell', msg)
-        return msg.header['msg_id']
+    @inherit_docstring(KernelClient)
+    def inspect(self, *args, **kwargs):
+        hdr = self.client.session.msg_header('inspect_request')
+        self.ioloop.add_callback(self.client.inspect, *args, _header=hdr, **kwargs)
+        return hdr['msg_id']
 
+    @inherit_docstring(KernelClient)
+    def history(self, *args, **kwargs):
+        hdr = self.client.session.msg_header('history_request')
+        self.ioloop.add_callback(self.client.history, *args, _header=hdr, **kwargs)
+        return hdr['msg_id']
+
+    @inherit_docstring(KernelClient)
     def kernel_info(self, _header=None):
-        """Request kernel info
+        hdr = self.client.session.msg_header('kernel_info_request')
+        self.ioloop.add_callback(self.client.kernel_info, _header=hdr)
+        return hdr['msg_id']
 
-        Returns
-        -------
-        The msg_id of the message sent
-        """
-        msg = kernel_info_request()
-        if _header:
-            msg.header = _header
-        self.messaging.send('shell', msg)
-        return msg.header['msg_id']
-
+    @inherit_docstring(KernelClient)
     def comm_info(self, target_name=None, _header=None):
-        """Request comm info
+        hdr = self.client.session.msg_header('comm_info_request')
+        self.ioloop.add_callback(self.client.comm_info, target_name, _header=hdr)
+        return hdr['msg_id']
 
-        Returns
-        -------
-        The msg_id of the message sent
-        """
-        msg = comm_info_request(target_name)
-        if _header:
-            msg.header = _header
-        self.messaging.send('shell', msg)
-        return msg.header['msg_id']
-
-    def _handle_kernel_info_reply(self, msg):
-        """handle kernel info reply
-
-        sets protocol adaptation version. This might
-        be run from a separate thread.
-        """
-        adapt_version = int(msg.content['protocol_version'].split('.')[0])
-        if adapt_version != major_protocol_version:
-            self.session.adapt_version = adapt_version
-
+    @inherit_docstring(KernelClient)
     def shutdown(self, restart=False, _header=None):
-        """Request an immediate kernel shutdown.
+        hdr = self.client.session.msg_header('shutdown_request')
+        self.ioloop.add_callback(self.client.shutdown, restart, _header=hdr)
+        return hdr['msg_id']
 
-        Upon receipt of the (empty) reply, client code can safely assume that
-        the kernel has shut down and it's safe to forcefully terminate it if
-        it's still alive.
-
-        The kernel will send the reply via a function registered with Python's
-        atexit module, ensuring it's truly done as the kernel is done with all
-        normal operation.
-
-        Returns
-        -------
-        The msg_id of the message sent
-        """
-        # Send quit message to kernel. Once we implement kernel-side setattr,
-        # this should probably be done that way, but for now this will do.
-        msg = shutdown_request(restart)
-        if _header:
-            msg.header = _header
-        self.messaging.send('shell', msg)
-        return msg.header['msg_id']
-
+    @inherit_docstring(KernelClient)
     def is_complete(self, code, _header=None):
-        """Ask the kernel whether some code is complete and ready to execute."""
-        msg = is_complete_request(code)
-        if _header:
-            msg.header = _header
-        self.messaging.send('shell', msg)
-        return msg.header['msg_id']
+        hdr = self.client.session.msg_header('is_complete_request')
+        self.ioloop.add_callback(self.client.is_complete, code, _header=hdr)
+        return hdr['msg_id']
 
+    @inherit_docstring(KernelClient)
     def interrupt(self, _header=None):
-        """Send an interrupt message/signal to the kernel"""
         mode = self.connection_info.get('interrupt_mode', 'signal')
         if mode == 'message':
-            msg = interrupt_request()
-            if _header:
-                msg.header = _header
-            self.messaging.send('shell', msg)
-            return msg['header']['msg_id']
-        elif self.owned_kernel:
-            self.manager.interrupt()
+            hdr = self.client.session.msg_header('is_complete_request')
+            self.ioloop.add_callback(self.client.interrupt, _header=hdr)
+            return hdr['msg_id']
         else:
-            self.log.warning("Can't send signal to non-owned kernel")
+            self.client.interrupt()
 
+    @inherit_docstring(KernelClient)
     def input(self, string, parent=None):
-        """Send a string of raw input to the kernel.
-
-        This should only be called in response to the kernel sending an
-        ``input_request`` message on the stdin channel.
-        """
-        msg = input_reply(string, parent=parent)
-        self.messaging.send('stdin', msg)
-
-    @property
-    def shell_socket(self):  # For convenience
-        return self.messaging.sockets['shell']
-
-    @property
-    def iopub_socket(self):
-        return self.messaging.sockets['iopub']
-
-    @property
-    def stdin_socket(self):
-        return self.messaging.sockets['stdin']
-
+        self.ioloop.add_callback(self.client.is_complete, string, parent=parent)
