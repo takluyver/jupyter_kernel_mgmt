@@ -12,9 +12,12 @@ import sys
 import time
 import zmq
 
-from ipython_genutils.py3compat import string_types, iteritems
 from traitlets.log import get_logger as get_app_logger
-from jupyter_protocol.messages import Message
+from jupyter_protocol.messages import (
+    Message, execute_request, complete_request, inspect_request,
+    history_request, kernel_info_request, comm_info_request, shutdown_request,
+    is_complete_request, interrupt_request, input_reply,
+)
 from jupyter_protocol.sockets import ClientMessaging
 from jupyter_protocol._version import protocol_version_info
 from .managerabc import KernelManagerABC
@@ -24,19 +27,6 @@ monotonic = time.monotonic
 
 major_protocol_version = protocol_version_info[0]
 
-
-# some utilities to validate message structure, these might get moved elsewhere
-# if they prove to have more generic utility
-
-def validate_string_dict(dct):
-    """Validate that the input is a dict with string keys and values.
-
-    Raises ValueError if not."""
-    for k, v in iteritems(dct):
-        if not isinstance(k, string_types):
-            raise ValueError('key %r in dict must be a string' % k)
-        if not isinstance(v, string_types):
-            raise ValueError('value %r in dict must be a string' % v)
 
 class ManagerClient(KernelManagerABC):
     def __init__(self, messaging, connection_info):
@@ -224,23 +214,9 @@ class KernelClient(object):
         -------
         The msg_id of the message sent.
         """
-        if user_expressions is None:
-            user_expressions = {}
-        if allow_stdin is None:
-            allow_stdin = self.allow_stdin
-
-        # Don't waste network traffic if inputs are invalid
-        if not isinstance(code, string_types):
-            raise ValueError('code %r must be a string' % code)
-        validate_string_dict(user_expressions)
-
-        # Create class for content/msg creation. Related to, but possibly
-        # not in Session.
-        content = dict(code=code, silent=silent, store_history=store_history,
-                       user_expressions=user_expressions,
-                       allow_stdin=allow_stdin, stop_on_error=stop_on_error
-                       )
-        msg = Message.from_type('execute_request', content)
+        msg = execute_request(code, silent=silent, store_history=store_history,
+              user_expressions=user_expressions, allow_stdin=allow_stdin,
+              stop_on_error=stop_on_error)
         if _header:
             msg.header = _header
         self.messaging.send('shell', msg)
@@ -262,10 +238,7 @@ class KernelClient(object):
         -------
         The msg_id of the message sent.
         """
-        if cursor_pos is None:
-            cursor_pos = len(code)
-        content = dict(code=code, cursor_pos=cursor_pos)
-        msg = Message.from_type('complete_request', content)
+        msg = complete_request(code, cursor_pos=cursor_pos)
         if _header:
             msg.header = _header
         self.messaging.send('shell', msg)
@@ -291,12 +264,7 @@ class KernelClient(object):
         -------
         The msg_id of the message sent.
         """
-        if cursor_pos is None:
-            cursor_pos = len(code)
-        content = dict(code=code, cursor_pos=cursor_pos,
-                       detail_level=detail_level,
-                       )
-        msg = Message.from_type('inspect_request', content)
+        msg = inspect_request(code, cursor_pos=cursor_pos, detail_level=detail_level)
         if _header:
             msg.header = _header
         self.messaging.send('shell', msg)
@@ -335,13 +303,8 @@ class KernelClient(object):
         -------
         The ID of the message sent.
         """
-        if hist_access_type == 'range':
-            kwargs.setdefault('session', 0)
-            kwargs.setdefault('start', 0)
-        content = dict(raw=raw, output=output,
-                       hist_access_type=hist_access_type,
-                       **kwargs)
-        msg = Message.from_type('history_request', content)
+        msg = history_request(raw=raw, output=output,
+                              hist_access_type=hist_access_type, **kwargs)
         if _header:
             msg.header = _header
         self.messaging.send('shell', msg)
@@ -354,7 +317,7 @@ class KernelClient(object):
         -------
         The msg_id of the message sent
         """
-        msg = Message.from_type('kernel_info_request', {})
+        msg = kernel_info_request()
         if _header:
             msg.header = _header
         self.messaging.send('shell', msg)
@@ -367,11 +330,7 @@ class KernelClient(object):
         -------
         The msg_id of the message sent
         """
-        if target_name is None:
-            content = {}
-        else:
-            content = dict(target_name=target_name)
-        msg = Message.from_type('comm_info_request', content)
+        msg = comm_info_request(target_name)
         if _header:
             msg.header = _header
         self.messaging.send('shell', msg)
@@ -383,7 +342,7 @@ class KernelClient(object):
         sets protocol adaptation version. This might
         be run from a separate thread.
         """
-        adapt_version = int(msg['content']['protocol_version'].split('.')[0])
+        adapt_version = int(msg.content['protocol_version'].split('.')[0])
         if adapt_version != major_protocol_version:
             self.session.adapt_version = adapt_version
 
@@ -404,7 +363,7 @@ class KernelClient(object):
         """
         # Send quit message to kernel. Once we implement kernel-side setattr,
         # this should probably be done that way, but for now this will do.
-        msg = Message.from_type('shutdown_request', {'restart': restart})
+        msg = shutdown_request(restart)
         if _header:
             msg.header = _header
         self.messaging.send('shell', msg)
@@ -412,7 +371,7 @@ class KernelClient(object):
 
     def is_complete(self, code, _header=None):
         """Ask the kernel whether some code is complete and ready to execute."""
-        msg = Message.from_type('is_complete_request', {'code': code})
+        msg = is_complete_request(code)
         if _header:
             msg.header = _header
         self.messaging.send('shell', msg)
@@ -422,7 +381,7 @@ class KernelClient(object):
         """Send an interrupt message/signal to the kernel"""
         mode = self.connection_info.get('interrupt_mode', 'signal')
         if mode == 'message':
-            msg = Message.from_type("interrupt_request", content={})
+            msg = interrupt_request()
             if _header:
                 msg.header = _header
             self.messaging.send('shell', msg)
@@ -438,8 +397,7 @@ class KernelClient(object):
         This should only be called in response to the kernel sending an
         ``input_request`` message on the stdin channel.
         """
-        content = dict(value=string)
-        msg = Message.from_type('input_reply', content, parent_msg=parent)
+        msg = input_reply(string, parent=parent)
         if _header:
             msg.header = _header
         self.messaging.send('stdin', msg)
