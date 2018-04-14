@@ -9,13 +9,13 @@ from tornado.ioloop import PeriodicCallback, IOLoop
 from zmq.eventloop.zmqstream import ZMQStream
 
 from .discovery import KernelFinder
-from .launcher2 import set_sticky_bit
+from .subproc.launcher import set_sticky_bit
 
 class KernelNanny:
-    def __init__(self, manager):
+    def __init__(self, connection_info, manager):
+        self.connection_info = connection_info
         self.manager = manager
-        self.connection_info = manager.get_connection_info()
-        self.messaging = NannyMessaging(self.connection_info)
+        self.messaging = NannyMessaging(connection_info)
         self.connection_file = self.write_connection_file()
         self.control_stream = ZMQStream(self.messaging.control_socket)
         self.control_stream.on_recv(self.handle_request)
@@ -71,8 +71,8 @@ class KernelNanny:
 def main():
     kf = KernelFinder.from_entrypoints()
     print("Launching kernel", sys.argv[1])
-    mgr = kf.launch(sys.argv[1])
-    nanny = KernelNanny(mgr)
+    conn_info, mgr = kf.launch(sys.argv[1])
+    nanny = KernelNanny(conn_info, mgr)
 
     loop = IOLoop.current()
     try:

@@ -131,7 +131,7 @@ class KernelFinder(object):
         Returns an instance of KernelFinder.
         """
         providers = []
-        for ep in entrypoints.get_group_all('jupyter_client.kernel_providers'):
+        for ep in entrypoints.get_group_all('jupyter_kernel_mgmt.kernel_type_providers'):
             try:
                 provider = ep.load()()  # Load and instantiate
             except Exception:

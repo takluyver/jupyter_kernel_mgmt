@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+import asyncio
 import six
 
 class KernelManager2ABC(six.with_metaclass(ABCMeta, object)):
@@ -50,22 +51,6 @@ class KernelManager2ABC(six.with_metaclass(ABCMeta, object)):
         """Clean up any resources, such as files created by the manager."""
         pass
 
-    @abstractmethod
-    def get_connection_info(self):
-        """Return a dictionary of connection information"""
-        pass
-
-    @abstractmethod
-    def relaunch(self):
-        """Attempt to relaunch the kernel using the same ports.
-
-        This is meant to be called after the managed kernel has died. Calling
-        it while the kernel is still alive has undefined behaviour.
-
-        Returns True if this manager supports that.
-        """
-        pass
-
 
 # noinspection PyCompatibility
 class AsyncManagerWrapper(KernelManager2ABC):
@@ -103,7 +88,3 @@ class AsyncManagerWrapper(KernelManager2ABC):
     @asyncio.coroutine
     def cleanup(self):
         return (yield from self._exec(self.wrapped.cleanup))
-
-    @asyncio.coroutine
-    def get_connection_info(self):
-        return (yield from self._exec(self.wrapped.get_connection_info))

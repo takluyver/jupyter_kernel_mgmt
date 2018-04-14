@@ -7,7 +7,7 @@
 from __future__ import print_function
 
 # the name of the project
-name = 'jupyter_client'
+name = 'jupyter_kernel_mgmt'
 
 #-----------------------------------------------------------------------------
 # Minimal Python version sanity check
@@ -94,13 +94,13 @@ setup_args = dict(
     },
     entry_points     = {
         'console_scripts': [
-            'jupyter-kernelspec = jupyter_client.kernelspecapp:KernelSpecApp.launch_instance',
-            'jupyter-run = jupyter_client.runapp:RunApp.launch_instance',
-            'jupyter-kernel = jupyter_client.kernelapp:main',
+            'jupyter-kernelspec = jupyter_kernel_mgmt.kernelspecapp:KernelSpecApp.launch_instance',
+            'jupyter-run = jupyter_kernel_mgmt.runapp:RunApp.launch_instance',
+            'jupyter-kernel = jupyter_kernel_mgmt.kernelapp:main',
         ],
-        'jupyter_client.kernel_providers' : [
-            'spec = jupyter_client.discovery:KernelSpecProvider',
-            'pyimport = jupyter_client.discovery:IPykernelProvider',
+        'jupyter_kernel_mgmt.kernel_type_providers' : [
+            'spec = jupyter_kernel_mgmt.discovery:KernelSpecProvider',
+            'pyimport = jupyter_kernel_mgmt.discovery:IPykernelProvider',
         ]
     },
 )
