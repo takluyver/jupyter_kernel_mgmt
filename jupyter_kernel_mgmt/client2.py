@@ -240,9 +240,11 @@ class KernelClient2(object):
                        user_expressions=user_expressions,
                        allow_stdin=allow_stdin, stop_on_error=stop_on_error
                        )
-        msg = self.session.msg('execute_request', content, header=_header)
+        msg = Message.from_type('execute_request', content)
+        if _header:
+            msg.header = _header
         self.messaging.send('shell', msg)
-        return msg['header']['msg_id']
+        return msg.header['msg_id']
 
     def complete(self, code, cursor_pos=None, _header=None):
         """Tab complete text in the kernel's namespace.
@@ -263,9 +265,11 @@ class KernelClient2(object):
         if cursor_pos is None:
             cursor_pos = len(code)
         content = dict(code=code, cursor_pos=cursor_pos)
-        msg = self.session.msg('complete_request', content, header=_header)
+        msg = Message.from_type('complete_request', content)
+        if _header:
+            msg.header = _header
         self.messaging.send('shell', msg)
-        return msg['header']['msg_id']
+        return msg.header['msg_id']
 
     def inspect(self, code, cursor_pos=None, detail_level=0, _header=None):
         """Get metadata information about an object in the kernel's namespace.
@@ -292,9 +296,11 @@ class KernelClient2(object):
         content = dict(code=code, cursor_pos=cursor_pos,
                        detail_level=detail_level,
                        )
-        msg = self.session.msg('inspect_request', content, header=_header)
+        msg = Message.from_type('inspect_request', content)
+        if _header:
+            msg.header = _header
         self.messaging.send('shell', msg)
-        return msg['header']['msg_id']
+        return msg.header['msg_id']
 
     def history(self, raw=True, output=False, hist_access_type='range',
                 _header=None, **kwargs):
@@ -335,9 +341,11 @@ class KernelClient2(object):
         content = dict(raw=raw, output=output,
                        hist_access_type=hist_access_type,
                        **kwargs)
-        msg = self.session.msg('history_request', content, header=_header)
+        msg = Message.from_type('history_request', content)
+        if _header:
+            msg.header = _header
         self.messaging.send('shell', msg)
-        return msg['header']['msg_id']
+        return msg.header['msg_id']
 
     def kernel_info(self, _header=None):
         """Request kernel info
@@ -346,9 +354,11 @@ class KernelClient2(object):
         -------
         The msg_id of the message sent
         """
-        msg = self.session.msg('kernel_info_request', header=_header)
+        msg = Message.from_type('kernel_info_request', {})
+        if _header:
+            msg.header = _header
         self.messaging.send('shell', msg)
-        return msg['header']['msg_id']
+        return msg.header['msg_id']
 
     def comm_info(self, target_name=None, _header=None):
         """Request comm info
@@ -361,9 +371,11 @@ class KernelClient2(object):
             content = {}
         else:
             content = dict(target_name=target_name)
-        msg = self.session.msg('comm_info_request', content, header=_header)
+        msg = Message.from_type('comm_info_request', content)
+        if _header:
+            msg.header = _header
         self.messaging.send('shell', msg)
-        return msg['header']['msg_id']
+        return msg.header['msg_id']
 
     def _handle_kernel_info_reply(self, msg):
         """handle kernel info reply
@@ -392,24 +404,27 @@ class KernelClient2(object):
         """
         # Send quit message to kernel. Once we implement kernel-side setattr,
         # this should probably be done that way, but for now this will do.
-        msg = self.session.msg('shutdown_request', {'restart': restart},
-                               header=_header)
+        msg = Message.from_type('shutdown_request', {'restart': restart})
+        if _header:
+            msg.header = _header
         self.messaging.send('shell', msg)
-        return msg['header']['msg_id']
+        return msg.header['msg_id']
 
     def is_complete(self, code, _header=None):
         """Ask the kernel whether some code is complete and ready to execute."""
-        msg = self.session.msg('is_complete_request', {'code': code},
-                               header=_header)
+        msg = Message.from_type('is_complete_request', {'code': code})
+        if _header:
+            msg.header = _header
         self.messaging.send('shell', msg)
-        return msg['header']['msg_id']
+        return msg.header['msg_id']
 
     def interrupt(self, _header=None):
         """Send an interrupt message/signal to the kernel"""
         mode = self.connection_info.get('interrupt_mode', 'signal')
         if mode == 'message':
-            msg = self.session.msg("interrupt_request", content={},
-                                   header=_header)
+            msg = Message.from_type("interrupt_request", content={})
+            if _header:
+                msg.header = _header
             self.messaging.send('shell', msg)
             return msg['header']['msg_id']
         elif self.owned_kernel:
@@ -424,8 +439,9 @@ class KernelClient2(object):
         ``input_request`` message on the stdin channel.
         """
         content = dict(value=string)
-        msg = self.session.msg('input_reply', content,
-                               header=_header, parent=parent)
+        msg = Message.from_type('input_reply', content, parent_msg=parent)
+        if _header:
+            msg.header = _header
         self.messaging.send('stdin', msg)
 
     @property
@@ -489,8 +505,7 @@ class BlockingKernelClient2(KernelClient2):
     def _recv(self, socket):
         """Receive and parse a message"""
         msg = socket.recv_multipart()
-        ident,smsg = self.session.feed_identities(msg)
-        return self.session.deserialize(smsg)
+        return self.session.deserialize(msg)
 
     def _get_msg(self, socket, block=True, timeout=None):
         if block:
@@ -573,7 +588,7 @@ class BlockingKernelClient2(KernelClient2):
             reply = self.get_shell_msg(timeout=timeout)
             if reply is None:
                 raise TimeoutError("Timeout waiting for reply")
-            elif reply['parent_header'].get('msg_id') != msg_id:
+            elif reply.parent_header.get('msg_id') != msg_id:
                 # not my reply, someone may have forgotten to retrieve theirs
                 continue
             return reply
