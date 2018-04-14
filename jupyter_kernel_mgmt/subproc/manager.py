@@ -5,7 +5,6 @@
 
 from __future__ import absolute_import
 
-from contextlib import contextmanager
 import logging
 import os
 import signal
@@ -18,10 +17,6 @@ log = logging.getLogger(__name__)
 
 from traitlets.log import get_logger as get_app_logger
 
-from .launcher import (
-    make_connection_file, build_popen_kwargs, prepare_interrupt_event
-)
-from ..localinterfaces import is_local_ip, local_ips, localhost
 from ..managerabc import KernelManager2ABC
 
 
@@ -33,47 +28,19 @@ class KernelManager2(KernelManager2ABC):
     Parameters
     ----------
 
-    kernel_cmd : list of str
-      The Popen command template to launch the kernel
-    cwd : str
-      The working directory to launch the kernel in
-    extra_env : dict, optional
-      Dictionary of environment variables to update the existing environment
-    ip : str, optional
-      Set the kernel\'s IP address [default localhost].
-      If the IP address is something other than localhost, then
-      Consoles on other machines will be able to connect
-      to the Kernel, so be careful!
+    popen : subprocess.Popen
+      The process with the started kernel
+    files_to_cleanup : list of paths, optional
+      Files to be cleaned up after terminating this kernel.
+    win_interrupt_evt :
+      On Windows, a handle to be used to interrupt the kernel.
+      Not used on other platforms.
     """
-    transport = 'tcp'
-
-    def __init__(self, kernel_cmd, cwd, extra_env=None, ip=None):
-        self.kernel_cmd = kernel_cmd
-        self.cwd = cwd
-        self.extra_env = extra_env
-        if ip is None:
-            ip = localhost()
-        self.ip = ip
+    def __init__(self, popen, files_to_cleanup=None, win_interrupt_evt=None):
+        self.kernel = popen
+        self.files_to_cleanup = files_to_cleanup or []
+        self.win_interrupt_evt = win_interrupt_evt
         self.log = get_app_logger()
-
-        if self.transport == 'tcp' and not is_local_ip(ip):
-            raise RuntimeError("Can only launch a kernel on a local interface. "
-                               "Make sure that the '*_address' attributes are "
-                               "configured properly. "
-                               "Currently valid addresses are: %s" % local_ips()
-                               )
-
-        self.connection_file, self.connection_info = \
-            make_connection_file(ip, self.transport)
-
-        kw = build_popen_kwargs(kernel_cmd, self.connection_file,
-                                extra_env, cwd)
-        self._win_interrupt_evt = prepare_interrupt_event(kw['env'])
-
-        # launch the kernel subprocess
-        self.log.debug("Starting kernel: %s", kw['args'])
-        self.kernel = subprocess.Popen(**kw)
-        self.kernel.stdin.close()
 
     def wait(self, timeout):
         """"""
@@ -100,28 +67,11 @@ class KernelManager2(KernelManager2ABC):
     def cleanup(self):
         """Clean up resources when the kernel is shut down"""
         # cleanup connection files on full shutdown of kernel we started
-        try:
-            os.remove(self.connection_file)
-        except (IOError, OSError, AttributeError):
-            pass
-
-    def relaunch(self):
-        """Attempt to relaunch the kernel using the same ports.
-
-        This is meant to be called after the managed kernel has died. Calling
-        it while the kernel is still alive has undefined behaviour.
-
-        Returns True if this manager supports that.
-        """
-        kw = build_popen_kwargs(self.kernel_cmd, self.connection_file,
-                                self.extra_env, self.cwd)
-        prepare_interrupt_event(kw['env'], self._win_interrupt_evt)
-
-        # launch the kernel subprocess
-        self.log.debug("Starting kernel: %s", kw['args'])
-        self.kernel = subprocess.Popen(**kw)
-        self.kernel.stdin.close()
-        return True
+        for f in self.files_to_cleanup:
+            try:
+                os.remove(f)
+            except (IOError, OSError, AttributeError):
+                pass
 
     def kill(self):
         """Kill the running kernel.
@@ -158,7 +108,7 @@ class KernelManager2(KernelManager2ABC):
         """
         if sys.platform == 'win32':
             from .win_interrupt import send_interrupt
-            send_interrupt(self._win_interrupt_evt)
+            send_interrupt(self.win_interrupt_evt)
         else:
             self.signal(signal.SIGINT)
 
@@ -183,55 +133,3 @@ class KernelManager2(KernelManager2ABC):
         """Is the kernel process still running?"""
         return self.kernel.poll() is None
 
-    def get_connection_info(self):
-        return self.connection_info
-
-class IPCKernelManager2(KernelManager2):
-    """Start a kernel on this machine to listen on IPC (filesystem) sockets"""
-    transport = 'ipc'
-
-    def cleanup(self):
-        ports = [v for (k, v) in self.connection_info.items()
-                 if k.endswith('_port')]
-        for port in ports:
-            ipcfile = "%s-%i" % (self.connection_info['ip'], port)
-            try:
-                os.remove(ipcfile)
-            except (IOError, OSError):
-                pass
-
-        super(IPCKernelManager2, self).cleanup()
-
-
-def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None):
-    """Start a new kernel, and return its Manager and a blocking client"""
-    from ..client2 import BlockingKernelClient2
-    cwd = cwd or os.getcwd()
-
-    km = KernelManager2(kernel_cmd, cwd=cwd)
-    kc = BlockingKernelClient2(km.connection_info, manager=km)
-    try:
-        kc.wait_for_ready(timeout=startup_timeout)
-    except RuntimeError:
-        kc.shutdown_or_terminate()
-        kc.close()
-        raise
-
-    return km, kc
-
-@contextmanager
-def run_kernel(kernel_cmd, **kwargs):
-    """Context manager to create a kernel in a subprocess.
-
-    The kernel is shut down when the context exits.
-
-    Returns
-    -------
-    kernel_client: connected KernelClient instance
-    """
-    km, kc = start_new_kernel(kernel_cmd, **kwargs)
-    try:
-        yield kc
-    finally:
-        kc.shutdown_or_terminate()
-        kc.close()

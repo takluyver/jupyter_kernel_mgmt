@@ -4,7 +4,7 @@ import logging
 import six
 
 from .kernelspec import KernelSpecManager
-from .subproc.manager import KernelManager2
+from .subproc import SubprocessKernelLauncher
 
 log = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
 
     @abstractmethod
     def launch(self, name, cwd=None):
-        """Launch a kernel, return an object with the KernelManager2 interface.
+        """Launch a kernel, return (connection_info, kernel_manager).
 
         name will be one of the kernel names produced by find_kernels()
 
@@ -57,7 +57,8 @@ class KernelSpecProvider(KernelProviderBase):
 
     def launch(self, name, cwd=None):
         spec = self.ksm.get_kernel_spec(name)
-        return KernelManager2(kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd)
+        launcher = SubprocessKernelLauncher(kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd)
+        return launcher.launch()
 
     def launch_async(self, name, cwd=None):
         from .subproc.async_manager import AsyncPopenKernelManager
@@ -99,8 +100,10 @@ class IPykernelProvider(KernelProviderBase):
         info = self._check_for_kernel()
         if info is None:
             raise Exception("ipykernel is not importable")
-        return KernelManager2(kernel_cmd=info['spec']['argv'], extra_env={},
-                              cwd=cwd)
+
+        launcher = SubprocessKernelLauncher(kernel_cmd=info['spec']['argv'],
+                                            extra_env={}, cwd=cwd)
+        return launcher.launch()
 
     def launch_async(self, name, cwd=None):
         from .subproc.async_manager import AsyncPopenKernelManager
