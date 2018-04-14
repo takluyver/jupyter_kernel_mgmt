@@ -391,15 +391,13 @@ class KernelClient(object):
         else:
             self.log.warning("Can't send signal to non-owned kernel")
 
-    def input(self, string, parent=None, _header=None):
+    def input(self, string, parent=None):
         """Send a string of raw input to the kernel.
 
         This should only be called in response to the kernel sending an
         ``input_request`` message on the stdin channel.
         """
         msg = input_reply(string, parent=parent)
-        if _header:
-            msg.header = _header
         self.messaging.send('stdin', msg)
 
     @property
