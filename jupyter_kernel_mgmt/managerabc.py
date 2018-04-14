@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 import asyncio
 import six
 
-class KernelManager2ABC(six.with_metaclass(ABCMeta, object)):
+class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
     @abstractmethod
     def is_alive(self):
         """Check whether the kernel is currently alive (e.g. the process exists)
@@ -53,7 +53,7 @@ class KernelManager2ABC(six.with_metaclass(ABCMeta, object)):
 
 
 # noinspection PyCompatibility
-class AsyncManagerWrapper(KernelManager2ABC):
+class AsyncManagerWrapper(KernelManagerABC):
     """Wrap a blocking KernelLauncher to be used asynchronously.
 
     This calls the blocking methods in the event loop's default executor.

@@ -17,10 +17,10 @@ log = logging.getLogger(__name__)
 
 from traitlets.log import get_logger as get_app_logger
 
-from ..managerabc import KernelManager2ABC
+from ..managerabc import KernelManagerABC
 
 
-class KernelManager2(KernelManager2ABC):
+class KernelManager(KernelManagerABC):
     """Manages a single kernel in a subprocess on this host.
 
     This version starts kernels with Popen to listen on TCP sockets.

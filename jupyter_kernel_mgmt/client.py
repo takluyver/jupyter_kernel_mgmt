@@ -17,7 +17,7 @@ from traitlets.log import get_logger as get_app_logger
 from jupyter_protocol.messages import Message
 from jupyter_protocol.sockets import ClientMessaging
 from jupyter_protocol._version import protocol_version_info
-from .managerabc import KernelManager2ABC
+from .managerabc import KernelManagerABC
 from .util import inherit_docstring
 
 monotonic = time.monotonic
@@ -38,7 +38,7 @@ def validate_string_dict(dct):
         if not isinstance(v, string_types):
             raise ValueError('value %r in dict must be a string' % v)
 
-class ManagerClient(KernelManager2ABC):
+class ManagerClient(KernelManagerABC):
     def __init__(self, messaging, connection_info):
         self.messaging = messaging
         self.connection_info = connection_info
@@ -132,7 +132,7 @@ class ManagerClient(KernelManager2ABC):
         return False
 
 
-class KernelClient2(object):
+class KernelClient(object):
     """Communicates with a single kernel on any host via zmq channels.
 
     The messages that can be sent are exposed as methods of the
@@ -495,7 +495,7 @@ def reqrep(meth):
     return wrapped
 
 
-class BlockingKernelClient2(KernelClient2):
+class BlockingKernelClient(KernelClient):
     """A KernelClient with blocking APIs
 
     ``get_[channel]_msg()`` methods wait for and return messages on channels,
@@ -593,17 +593,17 @@ class BlockingKernelClient2(KernelClient2):
                 continue
             return reply
 
-    execute = reqrep(KernelClient2.execute)
-    history = reqrep(KernelClient2.history)
-    complete = reqrep(KernelClient2.complete)
-    inspect = reqrep(KernelClient2.inspect)
-    kernel_info = reqrep(KernelClient2.kernel_info)
-    comm_info = reqrep(KernelClient2.comm_info)
-    shutdown = reqrep(KernelClient2.shutdown)
+    execute = reqrep(KernelClient.execute)
+    history = reqrep(KernelClient.history)
+    complete = reqrep(KernelClient.complete)
+    inspect = reqrep(KernelClient.inspect)
+    kernel_info = reqrep(KernelClient.kernel_info)
+    comm_info = reqrep(KernelClient.comm_info)
+    shutdown = reqrep(KernelClient.shutdown)
 
-    @inherit_docstring(KernelClient2)
+    @inherit_docstring(KernelClient)
     def interrupt(self, reply=False, timeout=None):
-        msg_id = super(BlockingKernelClient2, self).interrupt()
+        msg_id = super(BlockingKernelClient, self).interrupt()
         if reply and msg_id:
             return self._recv_reply(msg_id, timeout=timeout)
         else:

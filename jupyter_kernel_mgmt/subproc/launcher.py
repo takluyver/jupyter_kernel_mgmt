@@ -19,7 +19,7 @@ from ipython_genutils.py3compat import cast_bytes_py2
 from jupyter_core.paths import jupyter_runtime_dir
 from jupyter_core.utils import ensure_dir_exists
 from ..localinterfaces import localhost, is_local_ip, local_ips
-from .manager import KernelManager2
+from .manager import KernelManager
 
 port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port',
               'hb_port']
@@ -76,8 +76,8 @@ class SubprocessKernelLauncher:
         kernel.stdin.close()
 
         files_to_cleanup = list(self.files_to_cleanup(conn_file, conn_info))
-        mgr = KernelManager2(kernel, files_to_cleanup,
-                             win_interrupt_evt=win_interrupt_evt)
+        mgr = KernelManager(kernel, files_to_cleanup,
+                            win_interrupt_evt=win_interrupt_evt)
         return conn_info, mgr
 
     def files_to_cleanup(self, connection_file, connection_info):
@@ -312,12 +312,12 @@ def prepare_interrupt_event(env, interrupt_event=None):
 
 def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None):
     """Start a new kernel, and return its Manager and a blocking client"""
-    from ..client2 import BlockingKernelClient2
+    from ..client import BlockingKernelClient
     cwd = cwd or os.getcwd()
 
     launcher = SubprocessKernelLauncher(kernel_cmd, cwd=cwd)
     connection_info, km = launcher.launch()
-    kc = BlockingKernelClient2(connection_info, manager=km)
+    kc = BlockingKernelClient(connection_info, manager=km)
     try:
         kc.wait_for_ready(timeout=startup_timeout)
     except RuntimeError:

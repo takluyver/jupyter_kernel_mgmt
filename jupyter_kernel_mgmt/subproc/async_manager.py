@@ -7,10 +7,10 @@ from .launcher import (
     make_connection_file, build_popen_kwargs, prepare_interrupt_event
 )
 from ..localinterfaces import is_local_ip, local_ips, localhost
-from .manager import KernelManager2
+from .manager import KernelManager
 from ..util import inherit_docstring
 
-class AsyncPopenKernelManager(KernelManager2):
+class AsyncPopenKernelManager(KernelManager):
     """Run a kernel asynchronously in a subprocess.
 
     This is the async counterpart to PopenKernelLauncher.
@@ -70,7 +70,7 @@ class AsyncPopenKernelManager(KernelManager2):
         self.kernel.stdin.close()
         self._exit_future = asyncio.ensure_future(self.kernel.wait())
 
-    @inherit_docstring(KernelManager2)
+    @inherit_docstring(KernelManager)
     @asyncio.coroutine
     def wait(self, timeout):
         try:
@@ -79,37 +79,37 @@ class AsyncPopenKernelManager(KernelManager2):
         except asyncio.TimeoutError:
             return True
 
-    @inherit_docstring(KernelManager2)
+    @inherit_docstring(KernelManager)
     @asyncio.coroutine
     def is_alive(self):
         return not self._exit_future.done()
 
-    @inherit_docstring(KernelManager2)
+    @inherit_docstring(KernelManager)
     @asyncio.coroutine
     def signal(self, signum):
         return super().signal(signum)
 
-    @inherit_docstring(KernelManager2)
+    @inherit_docstring(KernelManager)
     @asyncio.coroutine
     def interrupt(self):
         return super().interrupt()
 
-    @inherit_docstring(KernelManager2)
+    @inherit_docstring(KernelManager)
     @asyncio.coroutine
     def kill(self):
         return super().kill()
 
-    @inherit_docstring(KernelManager2)
+    @inherit_docstring(KernelManager)
     @asyncio.coroutine
     def cleanup(self):
         return super().cleanup()
 
-    @inherit_docstring(KernelManager2)
+    @inherit_docstring(KernelManager)
     @asyncio.coroutine
     def get_connection_info(self):
         return self.connection_info
 
-    @inherit_docstring(KernelManager2)
+    @inherit_docstring(KernelManager)
     @asyncio.coroutine
     def relaunch(self):
         kw = build_popen_kwargs(self.kernel_cmd, self.connection_file,
@@ -126,14 +126,14 @@ class AsyncPopenKernelManager(KernelManager2):
 @asyncio.coroutine
 def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None):
     """Start a new kernel, and return its Manager and a blocking client"""
-    from ..client2 import BlockingKernelClient2
+    from ..client import BlockingKernelClient
     from ..async_manager import shutdown
     cwd = cwd or os.getcwd()
 
     km = AsyncPopenKernelManager(kernel_cmd, cwd=cwd)
     yield from km.launch()
     # TODO: asyncio client
-    kc = BlockingKernelClient2(km.connection_info, manager=km)
+    kc = BlockingKernelClient(km.connection_info, manager=km)
     try:
         kc.wait_for_ready(timeout=startup_timeout)
     except RuntimeError:

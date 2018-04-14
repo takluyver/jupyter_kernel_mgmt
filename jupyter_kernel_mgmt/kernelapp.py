@@ -7,8 +7,7 @@ from traitlets import Unicode
 
 from . import __version__
 from .discovery import KernelFinder
-from .client2 import BlockingKernelClient2
-from .manager2 import shutdown
+from .client import BlockingKernelClient
 
 class KernelApp(JupyterApp):
     """Launch a kernel by kernel type ID
@@ -46,8 +45,8 @@ class KernelApp(JupyterApp):
 
     def shutdown(self, signo):
         self.log.info('Shutting down on signal %d' % signo)
-        client = BlockingKernelClient2(self.manager.get_connection_info(),
-                                       manager=self.manager)
+        client = BlockingKernelClient(self.manager.get_connection_info(),
+                                      manager=self.manager)
         client.shutdown_or_terminate()
         client.close()
         self.loop.stop()
