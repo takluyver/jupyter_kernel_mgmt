@@ -1,3 +1,9 @@
+"""Clients built around a tornado IOLoop.
+"""
+
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
 import atexit
 from datetime import timedelta
 import errno
@@ -7,7 +13,6 @@ import sys
 from threading import Thread, Event
 from tornado.concurrent import Future
 from tornado import gen
-import zmq
 from zmq import ZMQError
 from zmq.eventloop import ioloop, zmqstream
 
@@ -217,7 +222,7 @@ def waiting_for_reply(method):
         # so don't bother building the wrapped docstring
         return wrapped
 
-    basedoc, _ = method.__doc__.split('Returns\n', 1)
+    basedoc = method.__doc__.split('Returns\n', 1)[0]
     parts = [basedoc.strip()]
     if 'Parameters' not in basedoc:
         parts.append("""
@@ -243,6 +248,9 @@ class BlockingKernelClient:
     def __init__(self, connection_info, manager=None):
         self.connection_info = connection_info
         self.loop_client = IOLoopKernelClient(connection_info, manager)
+
+    def close(self):
+        self.loop_client.close()
 
     # Methods to send specific messages.
     # These requests run the IOLoop until their reply arrives
