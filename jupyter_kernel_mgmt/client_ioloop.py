@@ -2,9 +2,12 @@ import atexit
 from datetime import timedelta
 import errno
 from functools import partial, wraps
+from getpass import getpass
+import sys
 from threading import Thread, Event
 from tornado.concurrent import Future
 from tornado import gen
+import zmq
 from zmq import ZMQError
 from zmq.eventloop import ioloop, zmqstream
 
@@ -209,7 +212,32 @@ def waiting_for_reply(method):
         return loop.run_sync(lambda: method(self.loop_client, *args, **kwargs),
                                     timeout=timeout)
 
+    if not method.__doc__:
+        # python -OO removes docstrings,
+        # so don't bother building the wrapped docstring
+        return wrapped
+
+    basedoc, _ = method.__doc__.split('Returns\n', 1)
+    parts = [basedoc.strip()]
+    if 'Parameters' not in basedoc:
+        parts.append("""
+        Parameters
+        ----------
+        """)
+    parts.append("""
+        timeout: float or None (default: None)
+            Timeout to use when waiting for a reply
+
+        Returns
+        -------
+        msg_id: str
+            The msg_id of the request sent, if reply=False (default)
+        reply: dict
+            The reply message for this request, if reply=True
+    """)
+    wrapped.__doc__ = '\n'.join(parts)
     return wrapped
+
 
 class BlockingKernelClient:
     def __init__(self, connection_info, manager=None):
@@ -228,6 +256,151 @@ class BlockingKernelClient:
     is_complete = waiting_for_reply(IOLoopKernelClient.is_complete)
     interrupt = waiting_for_reply(IOLoopKernelClient.interrupt)
     shutdown_or_terminate = waiting_for_reply(IOLoopKernelClient.shutdown_or_terminate)
+
+    def input(self, string, parent=None):
+        self.loop_client.input(string, parent=parent)
+
+    allow_stdin = True
+
+    def _stdin_hook_default(self, msg):
+        """Handle an input request"""
+        if msg.content.get('password', False):
+            prompt = getpass
+        else:
+            prompt = input
+
+        try:
+            raw_data = prompt(msg.content["prompt"])
+        except EOFError:
+            # turn EOFError into EOF character
+            raw_data = '\x04'
+        except KeyboardInterrupt:
+            sys.stdout.write('\n')
+            return
+
+        self.input(raw_data, parent=msg)
+
+    def _output_hook_default(self, msg):
+        """Default hook for redisplaying plain-text output"""
+        msg_type = msg.header['msg_type']
+        content = msg.content
+        if msg_type == 'stream':
+            stream = getattr(sys, content['name'])
+            stream.write(content['text'])
+        elif msg_type in ('display_data', 'execute_result'):
+            sys.stdout.write(content['data'].get('text/plain', ''))
+        elif msg_type == 'error':
+            print('\n'.join(content['traceback']), file=sys.stderr)
+
+    def _output_hook_kernel(self, session, socket, parent_header, msg):
+        """Output hook when running inside an IPython kernel
+
+        adds rich output support.
+        """
+        msg_type = msg['header']['msg_type']
+        if msg_type in ('display_data', 'execute_result', 'error'):
+            session.send(socket, msg_type, msg.content, parent=parent_header)
+        else:
+            self._output_hook_default(msg)
+
+    def execute_interactive(self, code, silent=False, store_history=True,
+                            user_expressions=None, allow_stdin=None,
+                            stop_on_error=True,
+                            timeout=None, output_hook=None, stdin_hook=None,
+                            ):
+        """Execute code in the kernel interactively
+
+        Output will be redisplayed, and stdin prompts will be relayed as well.
+        If an IPython kernel is detected, rich output will be displayed.
+
+        You can pass a custom output_hook callable that will be called
+        with every IOPub message that is produced instead of the default redisplay.
+
+        .. versionadded:: 5.0
+
+        Parameters
+        ----------
+        code : str
+            A string of code in the kernel's language.
+
+        silent : bool, optional (default False)
+            If set, the kernel will execute the code as quietly possible, and
+            will force store_history to be False.
+
+        store_history : bool, optional (default True)
+            If set, the kernel will store command history.  This is forced
+            to be False if silent is True.
+
+        user_expressions : dict, optional
+            A dict mapping names to expressions to be evaluated in the user's
+            dict. The expression values are returned as strings formatted using
+            :func:`repr`.
+
+        allow_stdin : bool, optional (default self.allow_stdin)
+            Flag for whether the kernel can send stdin requests to frontends.
+
+            Some frontends (e.g. the Notebook) do not support stdin requests.
+            If raw_input is called from code executed from such a frontend, a
+            StdinNotImplementedError will be raised.
+
+        stop_on_error: bool, optional (default True)
+            Flag whether to abort the execution queue, if an exception is encountered.
+
+        timeout: float or None (default: None)
+            Timeout to use when waiting for a reply
+
+        output_hook: callable(msg)
+            Function to be called with output messages.
+            If not specified, output will be redisplayed.
+
+        stdin_hook: callable(msg)
+            Function to be called with stdin_request messages.
+            If not specified, input/getpass will be called.
+
+        Returns
+        -------
+        reply: dict
+            The reply message for this request
+        """
+        if allow_stdin is None:
+            allow_stdin = self.allow_stdin
+
+        if stdin_hook is None:
+            stdin_hook = self._stdin_hook_default
+        if output_hook is None:
+            # detect IPython kernel
+            if 'IPython' in sys.modules:
+                from IPython import get_ipython
+                ip = get_ipython()
+                in_kernel = getattr(ip, 'kernel', False)
+                if in_kernel:
+                    output_hook = partial(
+                        self._output_hook_kernel,
+                        ip.display_pub.session,
+                        ip.display_pub.pub_socket,
+                        ip.display_pub.parent_header,
+                    )
+        if output_hook is None:
+            # default: redisplay plain-text outputs
+            output_hook = self._output_hook_default
+
+
+        self.loop_client.add_handler('stdin', stdin_hook)
+        self.loop_client.add_handler('iopub', output_hook)
+
+        try:
+            self.execute(code,
+                         silent=silent,
+                         store_history=store_history,
+                         user_expressions=user_expressions,
+                         allow_stdin=allow_stdin,
+                         stop_on_error=stop_on_error,
+                         timeout=timeout,
+                        )
+        finally:
+            self.loop_client.remove_handler('stdin', stdin_hook)
+            self.loop_client.remove_handler('iopub', output_hook)
+
 
 class ClientInThread(Thread):
     """Run an IOLoopKernelClient2 in a separate thread.
