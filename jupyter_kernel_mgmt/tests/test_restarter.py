@@ -1,6 +1,7 @@
 from .test_discovery import DummyKernelManager, DummyKernelProvider
 
-from jupyter_client import discovery, restarter2
+from jupyter_kernel_mgmt import discovery
+from jupyter_kernel_mgmt.restarter import KernelRestarterBase
 
 def test_reinstantiate():
     # If the kernel fails before the first poll, a new manager should be
@@ -9,8 +10,7 @@ def test_reinstantiate():
     manager = kf.launch('dummy/sample')
     manager.kill()
 
-    restarter = restarter2.KernelRestarterBase(manager, 'dummy/sample',
-                                               kernel_finder=kf)
+    restarter = KernelRestarterBase(manager, 'dummy/sample', kernel_finder=kf)
     assert restarter.kernel_manager is manager
     restarter.poll()
     assert restarter.kernel_manager is not manager
@@ -26,8 +26,7 @@ def test_relaunch():
         relaunch_count[0] += 1
     manager.relaunch = relaunch
 
-    restarter = restarter2.KernelRestarterBase(manager, 'dummy/sample',
-                                               kernel_finder=kf)
+    restarter = KernelRestarterBase(manager, 'dummy/sample', kernel_finder=kf)
     restarter.poll()
     assert relaunch_count[0] == 0
     # Kernel dies after first poll

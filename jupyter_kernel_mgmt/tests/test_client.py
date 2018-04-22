@@ -10,7 +10,7 @@ pjoin = os.path.join
 from unittest import TestCase
 
 from ipykernel.kernelspec import make_ipkernel_cmd
-from ..manager2 import start_new_kernel, shutdown
+from ..subproc.launcher import start_new_kernel
 from .utils import test_env
 
 from ipython_genutils.py3compat import string_types
@@ -27,7 +27,7 @@ class TestKernelClient(TestCase):
 
         self.km, self.kc = start_new_kernel(kernel_cmd=make_ipkernel_cmd())
         self.addCleanup(self.kc.close)
-        self.addCleanup(shutdown, self.kc, self.km)
+        self.addCleanup(self.kc.shutdown_or_terminate)
 
     def test_execute_interactive(self):
         kc = self.kc

@@ -13,8 +13,9 @@ from unittest import TestCase
 
 from ipykernel.kernelspec import make_ipkernel_cmd
 from jupyter_kernel_mgmt.subproc.manager import (
-    KernelManager2, run_kernel, start_new_kernel
+    KernelManager
 )
+from jupyter_kernel_mgmt.subproc.launcher import run_kernel,  start_new_kernel
 from .utils import test_env, skip_win32
 
 TIMEOUT = 30
@@ -31,7 +32,7 @@ class TestKernelManager(TestCase):
         self.env_patch.stop()
 
     def test_get_connect_info(self):
-        km = KernelManager2(make_ipkernel_cmd(), os.getcwd())
+        km = KernelManager(make_ipkernel_cmd(), os.getcwd())
         try:
             self.assertEqual(set(km.connection_info.keys()), {
                 'ip', 'transport',
