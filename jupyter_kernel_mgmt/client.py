@@ -435,14 +435,14 @@ class BlockingKernelClient:
         self.loop_client.add_handler('iopub', output_hook)
 
         try:
-            self.execute(code,
-                         silent=silent,
-                         store_history=store_history,
-                         user_expressions=user_expressions,
-                         allow_stdin=allow_stdin,
-                         stop_on_error=stop_on_error,
-                         timeout=timeout,
-                        )
+            return self.execute(code,
+                                silent=silent,
+                                store_history=store_history,
+                                user_expressions=user_expressions,
+                                allow_stdin=allow_stdin,
+                                stop_on_error=stop_on_error,
+                                timeout=timeout,
+                               )
         finally:
             self.loop_client.remove_handler('stdin', stdin_hook)
             self.loop_client.remove_handler('iopub', output_hook)
