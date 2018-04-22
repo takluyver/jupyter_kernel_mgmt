@@ -18,6 +18,11 @@ import tornado.util
 from zmq import ZMQError
 from zmq.eventloop import ioloop, zmqstream
 
+from jupyter_protocol.messages import (
+    execute_request, complete_request, inspect_request, history_request,
+    kernel_info_request, comm_info_request, shutdown_request, is_complete_request,
+    interrupt_request, input_reply,
+)
 from .client_base import KernelClient
 from .util import inherit_docstring
 
@@ -459,6 +464,7 @@ class ClientInThread(Thread):
     """
     client = None
     _exiting = False
+    _ready_fut = None
 
     def __init__(self, connection_info, manager=None, loop=None):
         super(ClientInThread, self).__init__()
@@ -466,6 +472,7 @@ class ClientInThread(Thread):
         self.connection_info = connection_info
         self.manager = manager
         self.started = Event()
+        self.kernel_responding = Event()
 
     @staticmethod
     @atexit.register
@@ -477,6 +484,8 @@ class ClientInThread(Thread):
         loop = ioloop.IOLoop(make_current=True)
         self.client = IOLoopKernelClient(self.connection_info, manager=self.manager)
         self.client.ioloop.add_callback(self.started.set)
+        self._ready_fut = self.client.wait_for_ready()
+        loop.add_future(self._ready_fut, lambda future: self.kernel_responding.set())
         try:
             self._run_loop()
         finally:
@@ -501,18 +510,13 @@ class ClientInThread(Thread):
             else:
                 break
 
-    @property
-    def ioloop(self):
-        if self.client:
-            return self.client.ioloop
-
     def close(self):
         """Shut down the client and wait for the thread to exit.
 
         This closes the client's sockets and ioloop, and joins its thread.
         """
         if self.client is not None:
-            self.ioloop.add_callback(self.client.ioloop.stop)
+            self.client.ioloop.add_callback(self.client.ioloop.stop)
             self.join()
 
     @inherit_docstring(IOLoopKernelClient)
@@ -523,68 +527,79 @@ class ClientInThread(Thread):
     def remove_handler(self, channel, handler):
         self.client.handlers[channel].remove(handler)
 
+    def _send(self, channel, msg):
+        self.client.ioloop.add_callback(self.client.messaging.send, channel, msg)
+
     # Client messaging methods --------------------------------
-    # These send as much work as possible to the IO thread, but we generate
-    # the header in the calling thread so we can return the message ID.
+    # The sending is done in the IO thread, but we generate
+    # the message in the calling thread so we can return the message ID.
 
     @inherit_docstring(KernelClient)
-    def execute(self, *args, **kwargs):
-        hdr = self.client.session.msg_header('execute_request')
-        self.ioloop.add_callback(self.client.execute, *args, _header=hdr, **kwargs)
-        return hdr['msg_id']
+    def execute(self, code, silent=False, store_history=True,
+                user_expressions=None, allow_stdin=None, stop_on_error=True):
+        msg = execute_request(code, silent=silent, store_history=store_history,
+              user_expressions=user_expressions, allow_stdin=allow_stdin,
+              stop_on_error=stop_on_error)
+        self._send('shell', msg)
+        return msg.header['msg_id']
 
     @inherit_docstring(KernelClient)
-    def complete(self, *args, **kwargs):
-        hdr = self.client.session.msg_header('complete_request')
-        self.ioloop.add_callback(self.client.complete, *args, _header=hdr, **kwargs)
-        return hdr['msg_id']
+    def complete(self, code, cursor_pos=None, _header=None):
+        msg = complete_request(code, cursor_pos=cursor_pos)
+        self._send('shell', msg)
+        return msg.header['msg_id']
 
     @inherit_docstring(KernelClient)
-    def inspect(self, *args, **kwargs):
-        hdr = self.client.session.msg_header('inspect_request')
-        self.ioloop.add_callback(self.client.inspect, *args, _header=hdr, **kwargs)
-        return hdr['msg_id']
+    def inspect(self, code, cursor_pos=None, detail_level=0, _header=None):
+        msg = inspect_request(code, cursor_pos=cursor_pos, detail_level=detail_level)
+        self._send('shell', msg)
+        return msg.header['msg_id']
 
     @inherit_docstring(KernelClient)
-    def history(self, *args, **kwargs):
-        hdr = self.client.session.msg_header('history_request')
-        self.ioloop.add_callback(self.client.history, *args, _header=hdr, **kwargs)
-        return hdr['msg_id']
+    def history(self, raw=True, output=False, hist_access_type='range',
+                _header=None, **kwargs):
+        msg = history_request(raw=raw, output=output,
+                              hist_access_type=hist_access_type, **kwargs)
+        self._send('shell', msg)
+        return msg.header['msg_id']
 
     @inherit_docstring(KernelClient)
     def kernel_info(self, _header=None):
-        hdr = self.client.session.msg_header('kernel_info_request')
-        self.ioloop.add_callback(self.client.kernel_info, _header=hdr)
-        return hdr['msg_id']
+        msg = kernel_info_request()
+        self._send('shell', msg)
+        return msg.header['msg_id']
 
     @inherit_docstring(KernelClient)
     def comm_info(self, target_name=None, _header=None):
-        hdr = self.client.session.msg_header('comm_info_request')
-        self.ioloop.add_callback(self.client.comm_info, target_name, _header=hdr)
-        return hdr['msg_id']
+        msg = comm_info_request(target_name)
+        self._send('shell', msg)
+        return msg.header['msg_id']
 
     @inherit_docstring(KernelClient)
     def shutdown(self, restart=False, _header=None):
-        hdr = self.client.session.msg_header('shutdown_request')
-        self.ioloop.add_callback(self.client.shutdown, restart, _header=hdr)
-        return hdr['msg_id']
+        msg = shutdown_request(restart)
+        self._send('shell', msg)
+        return msg.header['msg_id']
 
     @inherit_docstring(KernelClient)
     def is_complete(self, code, _header=None):
-        hdr = self.client.session.msg_header('is_complete_request')
-        self.ioloop.add_callback(self.client.is_complete, code, _header=hdr)
-        return hdr['msg_id']
+        msg = is_complete_request(code)
+        self._send('shell', msg)
+        return msg.header['msg_id']
 
     @inherit_docstring(KernelClient)
     def interrupt(self, _header=None):
         mode = self.connection_info.get('interrupt_mode', 'signal')
         if mode == 'message':
-            hdr = self.client.session.msg_header('is_complete_request')
-            self.ioloop.add_callback(self.client.interrupt, _header=hdr)
-            return hdr['msg_id']
+            msg = interrupt_request()
+            self._send('shell', msg)
+            return msg['header']['msg_id']
+        elif self.owned_kernel:
+            self.manager.interrupt()
         else:
-            self.client.interrupt()
+            self.log.warning("Can't send signal to non-owned kernel")
 
     @inherit_docstring(KernelClient)
     def input(self, string, parent=None):
-        self.ioloop.add_callback(self.client.is_complete, string, parent=parent)
+        msg = input_reply(string, parent=parent)
+        self._send('stdin', msg)

@@ -14,12 +14,12 @@ pjoin = os.path.join
 from unittest import TestCase
 
 from ipykernel.kernelspec import make_ipkernel_cmd
+from jupyter_protocol.messages import Message
 from jupyter_kernel_mgmt.subproc import SubprocessKernelLauncher
 from jupyter_kernel_mgmt.client import ClientInThread
 from .utils import test_env
 
 from ipython_genutils.py3compat import string_types
-from IPython.utils.capture import capture_output
 
 TIMEOUT = 30
 
@@ -36,7 +36,7 @@ class TestKernelClient(TestCase):
         self.kc = ClientInThread(connection_info, manager=km)
         self.received = {'shell': Queue(), 'iopub': Queue()}
         self.kc.start()
-        if not self.kc.started.wait(10.0):
+        if not self.kc.kernel_responding.wait(10.0):
             raise RuntimeError("Failed to start kernel client")
         self.kc.add_handler('shell', self.received['shell'].put)
         self.kc.add_handler('iopub', self.received['iopub'].put)
@@ -48,9 +48,9 @@ class TestKernelClient(TestCase):
         self.env_patch.stop()
 
     def _check_reply(self, reply_type, reply):
-        self.assertIsInstance(reply, dict)
-        self.assertEqual(reply['header']['msg_type'], reply_type + '_reply')
-        self.assertEqual(reply['parent_header']['msg_type'],
+        self.assertIsInstance(reply, Message)
+        self.assertEqual(reply.header['msg_type'], reply_type + '_reply')
+        self.assertEqual(reply.parent_header['msg_type'],
                          reply_type + '_request')
 
     def test_history(self):
