@@ -9,12 +9,10 @@ pjoin = os.path.join
 import signal
 import sys
 import time
+from tornado.ioloop import IOLoop
 from unittest import TestCase
 
 from ipykernel.kernelspec import make_ipkernel_cmd
-from jupyter_kernel_mgmt.subproc.manager import (
-    KernelManager
-)
 from jupyter_kernel_mgmt.subproc.launcher import run_kernel,  start_new_kernel
 from .utils import test_env, skip_win32
 
@@ -31,24 +29,12 @@ class TestKernelManager(TestCase):
     def tearDown(self):
         self.env_patch.stop()
 
-    def test_get_connect_info(self):
-        km = KernelManager(make_ipkernel_cmd(), os.getcwd())
-        try:
-            self.assertEqual(set(km.connection_info.keys()), {
-                'ip', 'transport',
-                'hb_port', 'shell_port', 'stdin_port', 'iopub_port', 'control_port',
-                'key', 'signature_scheme',
-            })
-        finally:
-            km.kill()
-            km.cleanup()
-
     @skip_win32
     def test_signal_kernel_subprocesses(self):
         with run_kernel(SIGNAL_KERNEL_CMD, startup_timeout=5) as kc:
             def execute(cmd):
-                reply = kc.execute(cmd, reply=True)
-                content = reply['content']
+                reply = kc.execute(cmd)
+                content = reply.content
                 self.assertEqual(content['status'], 'ok')
                 return content
 
@@ -60,11 +46,11 @@ class TestKernelManager(TestCase):
             self.assertEqual(reply['user_expressions']['poll'], [None] * N)
 
             # start a job on the kernel to be interrupted
-            kc.execute('sleep')
+            fut = kc.execute('sleep', reply=False)
             time.sleep(1)  # ensure sleep message has been handled before we interrupt
             kc.interrupt()
-            reply = kc.get_shell_msg(TIMEOUT)
-            content = reply['content']
+            reply = IOLoop.current().run_sync(lambda: fut)
+            content = reply.content
             self.assertEqual(content['status'], 'ok')
             self.assertEqual(content['user_expressions']['interrupted'], True)
             # wait up to 5s for subprocesses to handle signal
@@ -82,6 +68,5 @@ class TestKernelManager(TestCase):
         km, kc = start_new_kernel(make_ipkernel_cmd(), startup_timeout=5)
         try:
             self.assertTrue(km.is_alive())
-            self.assertTrue(kc.is_alive())
         finally:
             kc.shutdown_or_terminate()

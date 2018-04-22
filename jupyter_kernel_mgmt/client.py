@@ -242,7 +242,9 @@ class IOLoopKernelClient(KernelClient):
 
 def waiting_for_reply(method):
     @wraps(method)
-    def wrapped(self, *args, timeout=None, **kwargs):
+    def wrapped(self, *args, reply=True, timeout=None, **kwargs):
+        if not reply:
+            return method(self.loop_client, *args,  **kwargs)
         loop = self.loop_client.ioloop
         return loop.run_sync(lambda: method(self.loop_client, *args, **kwargs),
                                     timeout=timeout)
@@ -260,6 +262,8 @@ def waiting_for_reply(method):
         ----------
         """)
     parts.append("""
+        reply: bool (default: True)
+            Wait and return the reply. If False, return a tornado future.
         timeout: float or None (default: None)
             Timeout to use when waiting for a reply
 
