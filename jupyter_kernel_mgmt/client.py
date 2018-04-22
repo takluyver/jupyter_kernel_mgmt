@@ -11,8 +11,10 @@ from functools import partial, wraps
 from getpass import getpass
 import sys
 from threading import Thread, Event
+import time
 from tornado.concurrent import Future
 from tornado import gen
+import tornado.util
 from zmq import ZMQError
 from zmq.eventloop import ioloop, zmqstream
 
@@ -50,6 +52,8 @@ class IOLoopKernelClient(KernelClient):
         for channel, socket in self.messaging.sockets.items():
             self.streams[channel] = s = zmqstream.ZMQStream(socket, self.ioloop)
             s.on_recv(partial(self._handle_recv, channel))
+
+        self._kernel_info_future = self.kernel_info()
 
     def close(self):
         """Close the client's sockets & streams.
@@ -191,6 +195,32 @@ class IOLoopKernelClient(KernelClient):
             self.manager.kill()
         self.manager.cleanup()
 
+    @gen.coroutine
+    def wait_for_ready(self, timeout=None):
+        if timeout is None:
+            abs_timeout = float('inf')
+        else:
+            abs_timeout = time.time() + timeout
+        second = timedelta(seconds=1)
+
+        # Wait for kernel info reply on shell channel
+        while True:
+            try:
+                yield gen.with_timeout(second, self._kernel_info_future)
+            except tornado.util.TimeoutError:
+                pass
+            else:
+                break
+
+            if not self.is_alive():
+                raise RuntimeError(
+                    'Kernel died before replying to kernel_info')
+
+            # Check if current time is ready check time plus timeout
+            if time.time() > abs_timeout:
+                raise RuntimeError(
+                    "Kernel didn't respond in %d seconds" % timeout)
+
     def is_complete(self, code, _header=None):
         """Ask the kernel whether some code is complete and ready to execute."""
         msg_id = super().is_complete(code, _header=_header)
@@ -264,6 +294,10 @@ class BlockingKernelClient:
     is_complete = waiting_for_reply(IOLoopKernelClient.is_complete)
     interrupt = waiting_for_reply(IOLoopKernelClient.interrupt)
     shutdown_or_terminate = waiting_for_reply(IOLoopKernelClient.shutdown_or_terminate)
+
+    def wait_for_ready(self, timeout=None):
+        loop = self.loop_client.ioloop
+        loop.run_sync(lambda: self.loop_client.wait_for_ready(timeout=timeout))
 
     def input(self, string, parent=None):
         self.loop_client.input(string, parent=parent)
