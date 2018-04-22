@@ -14,8 +14,8 @@ pjoin = os.path.join
 from unittest import TestCase
 
 from ipykernel.kernelspec import make_ipkernel_cmd
-from jupyter_client.manager2 import KernelManager2, shutdown
-from jupyter_client.client2_ioloop import ClientInThread
+from jupyter_kernel_mgmt.subproc import SubprocessKernelLauncher
+from jupyter_kernel_mgmt.client import ClientInThread
 from .utils import test_env
 
 from ipython_genutils.py3compat import string_types
@@ -31,8 +31,9 @@ class TestKernelClient(TestCase):
         self.addCleanup(self.env_patch.stop)
 
         # Start a client in a new thread, put received messages in queues.
-        self.km = KernelManager2(make_ipkernel_cmd(), cwd='.')
-        self.kc = ClientInThread(self.km.get_connection_info(), manager=self.km)
+        launcher = SubprocessKernelLauncher(make_ipkernel_cmd(), cwd='.')
+        connection_info, km = launcher.launch()
+        self.kc = ClientInThread(connection_info, manager=km)
         self.received = {'shell': Queue(), 'iopub': Queue()}
         self.kc.start()
         if not self.kc.started.wait(10.0):
@@ -42,7 +43,7 @@ class TestKernelClient(TestCase):
 
 
     def tearDown(self):
-        shutdown(self.kc, self.km)
+        self.kc.shutdown()
         self.kc.close()
         self.env_patch.stop()
 
