@@ -61,10 +61,10 @@ class KernelSpecProvider(KernelProviderBase):
         return launcher.launch()
 
     def launch_async(self, name, cwd=None):
-        from .subproc.async_manager import AsyncPopenKernelManager
+        from .subproc.async_manager import AsyncSubprocessKernelLauncher
         spec = self.ksm.get_kernel_spec(name)
-        return AsyncPopenKernelManager.launch(
-            kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd)
+        return AsyncSubprocessKernelLauncher(
+            kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd).launch()
 
 class IPykernelProvider(KernelProviderBase):
     """Offers a kernel type using the Python interpreter it's running in.
@@ -106,12 +106,12 @@ class IPykernelProvider(KernelProviderBase):
         return launcher.launch()
 
     def launch_async(self, name, cwd=None):
-        from .subproc.async_manager import AsyncPopenKernelManager
+        from .subproc.async_manager import AsyncSubprocessKernelLauncher
         info = self._check_for_kernel()
         if info is None:
             raise Exception("ipykernel is not importable")
-        return AsyncPopenKernelManager.launch(
-            kernel_cmd=info['spec']['argv'], extra_env={}, cwd=cwd)
+        return AsyncSubprocessKernelLauncher(
+            kernel_cmd=info['spec']['argv'], extra_env={}, cwd=cwd).launch()
 
 class KernelFinder(object):
     """Manages a collection of kernel providers to find available kernel types

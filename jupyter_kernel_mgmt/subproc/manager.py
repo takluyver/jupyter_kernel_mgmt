@@ -23,8 +23,6 @@ from ..managerabc import KernelManagerABC
 class KernelManager(KernelManagerABC):
     """Manages a single kernel in a subprocess on this host.
 
-    This version starts kernels with Popen to listen on TCP sockets.
-
     Parameters
     ----------
 

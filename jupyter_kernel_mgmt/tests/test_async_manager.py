@@ -5,9 +5,9 @@ from unittest import TestCase
 asyncio = pytest.importorskip('asyncio')
 
 from ipykernel.kernelspec import make_ipkernel_cmd
-from .utils import test_env, skip_win32
-from jupyter_client.async_manager import (
-    AsyncPopenKernelManager, shutdown, start_new_kernel
+from .utils import test_env
+from jupyter_kernel_mgmt.subproc.async_manager import (
+    AsyncSubprocessKernelLauncher, start_new_kernel
 )
 
 # noinspection PyCompatibility
@@ -21,10 +21,9 @@ class TestKernelManager(TestCase):
 
     @asyncio.coroutine
     def t_get_connect_info(self):
-        km = AsyncPopenKernelManager(make_ipkernel_cmd(), os.getcwd())
-        yield from km.launch()
+        launcher = AsyncSubprocessKernelLauncher(make_ipkernel_cmd(), os.getcwd())
+        info, km = yield from launcher.launch()
         try:
-            info = yield from km.get_connection_info()
             self.assertEqual(set(info.keys()), {
                 'ip', 'transport',
                 'hb_port', 'shell_port', 'stdin_port', 'iopub_port', 'control_port',
@@ -44,7 +43,7 @@ class TestKernelManager(TestCase):
             self.assertTrue((yield from km.is_alive()))
             self.assertTrue(kc.is_alive())
         finally:
-            yield from shutdown(kc, km)
+            kc.shutdown_or_terminate()
 
     def test_start_new_kernel(self):
         asyncio.get_event_loop().run_until_complete(self.t_start_new_kernel())
