@@ -1,7 +1,7 @@
 import sys
 
-from jupyter_client import discovery
-from jupyter_client.manager2 import KernelManager2ABC
+from jupyter_kernel_mgmt import discovery
+from jupyter_kernel_mgmt.managerabc import KernelManagerABC
 
 def test_ipykernel_provider():
     import ipykernel  # Fail clearly if ipykernel not installed
@@ -23,7 +23,7 @@ class DummyKernelProvider(discovery.KernelProviderBase):
     def launch(self, name, cwd=None):
         return DummyKernelManager()
 
-class DummyKernelManager(KernelManager2ABC):
+class DummyKernelManager(KernelManagerABC):
     _alive = True
     def is_alive(self):
         """Check whether the kernel is currently alive (e.g. the process exists)

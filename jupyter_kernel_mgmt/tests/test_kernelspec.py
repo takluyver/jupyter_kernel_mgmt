@@ -21,7 +21,7 @@ else:
     StringIO = io.StringIO
 
 from ipython_genutils.tempdir import TemporaryDirectory
-from jupyter_client import kernelspec
+from jupyter_kernel_mgmt import kernelspec
 from jupyter_core import paths
 from .utils import test_env
 
