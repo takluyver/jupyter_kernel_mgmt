@@ -28,14 +28,13 @@ from .util import inherit_docstring
 
 
 class ErrorInKernel(Exception):
-    def __init__(self, ename, evalue, traceback):
-        self.ename = ename
-        self.evalue = evalue
-        self.traceback = traceback
+    def __init__(self, reply_msg):
+        self.reply_msg = reply_msg
 
     def __str__(self):
-        return '\n'.join(self.traceback
-                         + ['{}: {}'.format(self.ename,  self.evalue)])
+        c = self.reply_msg.content
+        return '\n'.join(c.get('traceback', [])
+                         + ['{}: {}'.format(c.get('ename', 'ERROR'), c.get('evalue', ''))])
 
 class IOLoopKernelClient(KernelClient):
     """Uses a zmq/tornado IOLoop to handle received messages and fire callbacks.
@@ -88,10 +87,7 @@ class IOLoopKernelClient(KernelClient):
             parent_future = self.request_futures.pop(parent_id, None)
             if parent_future:
                 if msg.content.get('status', 'ok') == 'error':
-                    e = ErrorInKernel(msg.content.get('ename', 'ERROR'),
-                                      msg.content.get('evalue', ''),
-                                      msg.content.get('traceback', [])
-                                     )
+                    e = ErrorInKernel(msg)
                     parent_future.set_exception(e)
                 else:
                     parent_future.set_result(msg)
