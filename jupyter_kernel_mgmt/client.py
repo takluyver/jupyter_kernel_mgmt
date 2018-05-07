@@ -253,7 +253,7 @@ class IOLoopKernelClient(KernelClient):
         second = timedelta(seconds=1)
 
         # Repeatedly do kernel info requests until our iopub subscription works.
-        while not self._iopub_ready:
+        while True:
             reply_fut = self.kernel_info()
             while True:
                 try:
@@ -266,6 +266,10 @@ class IOLoopKernelClient(KernelClient):
                 if not self.is_alive():
                     raise RuntimeError(
                         'Kernel died before replying to kernel_info')
+
+            if self._iopub_ready:
+                return
+            yield from gen.sleep(0.01)
 
     def _set_iopub_ready(self, msg):
         self._iopub_ready = True
