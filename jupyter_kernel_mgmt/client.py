@@ -14,9 +14,10 @@ from threading import Thread, Event
 import time
 from tornado.concurrent import Future
 from tornado import gen
+from tornado import ioloop
 import tornado.util
 from zmq import ZMQError
-from zmq.eventloop import ioloop, zmqstream
+from zmq.eventloop import zmqstream
 
 from jupyter_protocol.messages import (
     execute_request, complete_request, inspect_request, history_request,
@@ -25,6 +26,8 @@ from jupyter_protocol.messages import (
 )
 from .client_base import KernelClient
 from .util import inherit_docstring
+
+DEBUG_LOGGING = False
 
 
 class ErrorInKernel(Exception):
@@ -46,8 +49,9 @@ class IOLoopKernelClient(KernelClient):
         super(IOLoopKernelClient, self).__init__(connection_info, manager)
         self.ioloop = ioloop.IOLoop.current()
         self.request_futures = {}
+        self._iopub_ready = False
         self.handlers = {
-            'iopub': [],
+            'iopub': [self._set_iopub_ready],
             'shell': [self._auto_adapt, self._fulfil_request],
             'stdin': [],
             'control': [self._fulfil_request],
@@ -57,7 +61,9 @@ class IOLoopKernelClient(KernelClient):
             self.streams[channel] = s = zmqstream.ZMQStream(socket, self.ioloop)
             s.on_recv(partial(self._handle_recv, channel))
 
-        self._kernel_info_future = self.kernel_info()
+        if DEBUG_LOGGING:
+            for channel in ('iopub', 'shell', 'stdin', 'control'):
+                self.add_handler(channel, partial(self._debug_log, channel))
 
     def close(self):
         """Close the client's sockets & streams.
@@ -68,6 +74,9 @@ class IOLoopKernelClient(KernelClient):
             stream.close()
         if self.hb_monitor:
             self.hb_monitor.stop()
+
+    def _debug_log(self, channel, msg):
+        print(channel, msg.header['msg_id'][:8], msg.header['msg_type'], 'parent:', msg.parent_header.get('msg_id', '-')[:8])
 
     def _auto_adapt(self, msg):
         """Use the first kernel_info_reply to set up protocol version adaptation
@@ -85,7 +94,7 @@ class IOLoopKernelClient(KernelClient):
         if msg.header['msg_type'].endswith('_reply'):
             parent_id = msg.parent_header.get('msg_id')
             parent_future = self.request_futures.pop(parent_id, None)
-            if parent_future:
+            if parent_future and not parent_future.cancelled():
                 if msg.content.get('status', 'ok') == 'error':
                     e = ErrorInKernel(msg)
                     parent_future.set_exception(e)
@@ -130,13 +139,55 @@ class IOLoopKernelClient(KernelClient):
 
     # Methods to send specific messages.
     # These requests all return a Future, which completes when the reply arrives
+    @gen.coroutine
     def execute(self, code, silent=False, store_history=True,
                 user_expressions=None, allow_stdin=None, stop_on_error=True,
-                _header=None):
+                interrupt_timeout=None, idle_timeout=None, raise_on_no_idle=False, _header=None):
         msg_id = super().execute(code, silent=silent, store_history=store_history,
               user_expressions=user_expressions, allow_stdin=allow_stdin,
               stop_on_error=stop_on_error, _header=_header)
-        return self._request_future(msg_id)
+        # print("Sent execute_request", msg_id[:8])
+        request_fut = self._request_future(msg_id)
+        if not (interrupt_timeout or idle_timeout):
+            return (yield from request_fut)
+
+        interrupt_cb = None
+        if interrupt_timeout:
+            interrupt_cb = self.ioloop.call_later(interrupt_timeout,
+                                                  self.interrupt)
+
+        got_idle_fut = Future()
+        def watch_for_idle(msg):
+            if msg.header['msg_type'] == 'status' \
+                    and msg.parent_header.get('msg_id') == msg_id \
+                    and msg.content['execution_state'] == 'idle':
+                got_idle_fut.set_result(msg)
+        self.add_handler('iopub', watch_for_idle)
+
+        try:
+            try:
+                reply = yield from request_fut
+            except ErrorInKernel as e:
+                reply = e.reply_msg
+            if interrupt_cb is not None:
+                self.ioloop.remove_timeout(interrupt_cb)
+
+            if idle_timeout:
+                # Wait for idle message -
+                # this may resolve immediately if we already got it.
+                try:
+                    yield from gen.with_timeout(timedelta(seconds=idle_timeout),
+                                                got_idle_fut)
+                except ioloop.TimeoutError:
+                    print("Timed out waiting for idle")
+                    if raise_on_no_idle:
+                        raise
+        finally:
+            self.remove_handler('iopub', watch_for_idle)
+
+        if reply.content.get('status', 'ok') == 'error':
+            raise ErrorInKernel(reply)
+        return reply
 
     def complete(self, code, cursor_pos=None, _header=None):
         """Tab complete text in the kernel's namespace.
@@ -170,6 +221,7 @@ class IOLoopKernelClient(KernelClient):
 
     def kernel_info(self, _header=None):
         msg_id = super().kernel_info(_header=_header)
+        # print("Send kernel_info_request", msg_id[:8])
         return self._request_future(msg_id)
 
     def comm_info(self, target_name=None, _header=None):
@@ -191,36 +243,33 @@ class IOLoopKernelClient(KernelClient):
                 "Cannot terminate a kernel without a KernelManager")
         try:
             yield gen.with_timeout(timedelta(seconds=timeout), self.shutdown())
-        except TimeoutError:
+        except tornado.util.TimeoutError:
             self.log.debug("Kernel is taking too long to finish, killing")
             self.manager.kill()
         self.manager.cleanup()
 
     @gen.coroutine
-    def wait_for_ready(self, timeout=None):
-        if timeout is None:
-            abs_timeout = float('inf')
-        else:
-            abs_timeout = time.time() + timeout
+    def wait_for_ready(self):
         second = timedelta(seconds=1)
 
-        # Wait for kernel info reply on shell channel
-        while True:
-            try:
-                yield gen.with_timeout(second, self._kernel_info_future)
-            except tornado.util.TimeoutError:
-                pass
-            else:
-                break
+        # Repeatedly do kernel info requests until our iopub subscription works.
+        while not self._iopub_ready:
+            reply_fut = self.kernel_info()
+            while True:
+                try:
+                    yield from gen.with_timeout(second, reply_fut)
+                except tornado.util.TimeoutError:
+                    pass
+                else:
+                    break
 
-            if not self.is_alive():
-                raise RuntimeError(
-                    'Kernel died before replying to kernel_info')
+                if not self.is_alive():
+                    raise RuntimeError(
+                        'Kernel died before replying to kernel_info')
 
-            # Check if current time is ready check time plus timeout
-            if time.time() > abs_timeout:
-                raise RuntimeError(
-                    "Kernel didn't respond in %d seconds" % timeout)
+    def _set_iopub_ready(self, msg):
+        self._iopub_ready = True
+        self.remove_handler('iopub', self._set_iopub_ready)
 
     def is_complete(self, code, _header=None):
         """Ask the kernel whether some code is complete and ready to execute."""
@@ -302,7 +351,7 @@ class BlockingKernelClient:
 
     def wait_for_ready(self, timeout=None):
         loop = self.loop_client.ioloop
-        loop.run_sync(lambda: self.loop_client.wait_for_ready(timeout=timeout))
+        loop.run_sync(lambda: self.loop_client.wait_for_ready(), timeout=timeout)
 
     def input(self, string, parent=None):
         self.loop_client.input(string, parent=parent)
@@ -354,6 +403,8 @@ class BlockingKernelClient:
                             user_expressions=None, allow_stdin=None,
                             stop_on_error=True,
                             timeout=None, output_hook=None, stdin_hook=None,
+                            interrupt_timeout=None,
+                            idle_timeout=4.0, raise_on_no_idle=False,
                             ):
         """Execute code in the kernel interactively
 
@@ -431,19 +482,22 @@ class BlockingKernelClient:
             # default: redisplay plain-text outputs
             output_hook = self._output_hook_default
 
-
         self.loop_client.add_handler('stdin', stdin_hook)
         self.loop_client.add_handler('iopub', output_hook)
 
         try:
-            return self.execute(code,
-                                silent=silent,
-                                store_history=store_history,
-                                user_expressions=user_expressions,
-                                allow_stdin=allow_stdin,
-                                stop_on_error=stop_on_error,
-                                timeout=timeout,
-                               )
+            return self.execute(
+                code,
+                silent=silent,
+                store_history=store_history,
+                user_expressions=user_expressions,
+                allow_stdin=allow_stdin,
+                stop_on_error=stop_on_error,
+                timeout=timeout,
+                interrupt_timeout=interrupt_timeout,
+                idle_timeout=idle_timeout,
+                raise_on_no_idle=raise_on_no_idle,
+               )
         finally:
             self.loop_client.remove_handler('stdin', stdin_hook)
             self.loop_client.remove_handler('iopub', output_hook)
