@@ -98,7 +98,7 @@ def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None):
     info, km = yield from launcher.launch()
     kc = IOLoopKernelClient(info, manager=km)
     try:
-        yield from kc.wait_for_ready(timeout=startup_timeout)
+        yield from asyncio.wait_for(kc.wait_for_ready(), timeout=startup_timeout)
     except RuntimeError:
         yield from kc.shutdown_or_terminate()
         raise
