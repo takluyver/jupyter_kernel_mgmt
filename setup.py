@@ -63,6 +63,7 @@ setup_args = dict(
     install_requires = [
         'traitlets',
         'jupyter_core',
+        'jupyter_protocol',
         'pyzmq>=13',
         'python-dateutil>=2.1',
         'entrypoints',
