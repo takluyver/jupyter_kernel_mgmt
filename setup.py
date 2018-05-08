@@ -9,27 +9,16 @@ from __future__ import print_function
 # the name of the project
 name = 'jupyter_kernel_mgmt'
 
-#-----------------------------------------------------------------------------
-# Minimal Python version sanity check
-#-----------------------------------------------------------------------------
-
+import os
 import sys
+from setuptools import setup
+from setuptools.command.bdist_egg import bdist_egg
 
 v = sys.version_info
-if v[:2] < (2,7) or (v[0] >= 3 and v[:2] < (3,3)):
-    error = "ERROR: %s requires Python version 2.7 or 3.3 or above." % name
+if v[:2] < (3, 4):
+    error = "ERROR: %s requires Python version 3.4 or above." % name
     print(error, file=sys.stderr)
     sys.exit(1)
-
-PY3 = (sys.version_info[0] >= 3)
-
-#-----------------------------------------------------------------------------
-# get on with it
-#-----------------------------------------------------------------------------
-
-import os
-
-from setuptools import setup
 
 pjoin = os.path.join
 here = os.path.abspath(os.path.dirname(__file__))
@@ -43,8 +32,6 @@ for d, _, _ in os.walk(pjoin(here, name)):
 version_ns = {}
 with open(pjoin(here, name, '_version.py')) as f:
     exec(f.read(), {}, version_ns)
-
-from setuptools.command.bdist_egg import bdist_egg
 
 class bdist_egg_disabled(bdist_egg):
     """Disabled version of bdist_egg
@@ -65,17 +52,13 @@ setup_args = dict(
     author_email    = 'jupyter@googlegroups.com',
     url             = 'https://jupyter.org',
     license         = 'BSD',
-    platforms       = "Linux, Mac OS X, Windows",
-    keywords        = ['Interactive', 'Interpreter', 'Shell', 'Web'],
     classifiers     = [
         'Intended Audience :: Developers',
         'Intended Audience :: System Administrators',
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: BSD License',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.3',
     ],
     install_requires = [
         'traitlets',
@@ -85,10 +68,9 @@ setup_args = dict(
         'entrypoints',
     ],
     extras_require   = {
-        'test': ['ipykernel', 'ipython', 'mock'],
-        'test:python_version == "3.3"': ['pytest<3.3.0'],
-        'test:python_version >= "3.4" or python_version == "2.7"': ['pytest'],
+        'test': ['ipykernel', 'ipython', 'mock', 'pytest'],
     },
+    python_requires = ">=3.4",
     cmdclass         = {
         'bdist_egg': bdist_egg if 'bdist_egg' in sys.argv else bdist_egg_disabled,
     },
