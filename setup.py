@@ -76,9 +76,9 @@ setup_args = dict(
     },
     entry_points     = {
         'console_scripts': [
-            'jupyter-kernelspec = jupyter_kernel_mgmt.kernelspecapp:KernelSpecApp.launch_instance',
-            'jupyter-run = jupyter_kernel_mgmt.runapp:RunApp.launch_instance',
-            'jupyter-kernel = jupyter_kernel_mgmt.kernelapp:main',
+            # 'jupyter-kernelspec = jupyter_kernel_mgmt.kernelspecapp:KernelSpecApp.launch_instance',
+            # 'jupyter-run = jupyter_kernel_mgmt.runapp:RunApp.launch_instance',
+            # 'jupyter-kernel = jupyter_kernel_mgmt.kernelapp:main',
         ],
         'jupyter_kernel_mgmt.kernel_type_providers' : [
             'spec = jupyter_kernel_mgmt.discovery:KernelSpecProvider',
