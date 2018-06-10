@@ -379,7 +379,7 @@ class KernelClient(object):
             if _header:
                 msg.header = _header
             self.messaging.send('shell', msg)
-            return msg['header']['msg_id']
+            return msg.header['msg_id']
         elif self.owned_kernel:
             self.manager.interrupt()
         else:
