@@ -87,6 +87,7 @@ class IOLoopKernelClient(KernelClient):
 
     def _request_future(self, msg_id):
         self.request_futures[msg_id] = f = Future()
+        f.jupyter_msg_id = msg_id
         return f
 
     def _fulfil_request(self, msg):
@@ -139,7 +140,6 @@ class IOLoopKernelClient(KernelClient):
 
     # Methods to send specific messages.
     # These requests all return a Future, which completes when the reply arrives
-    @gen.coroutine
     def execute(self, code, silent=False, store_history=True,
                 user_expressions=None, allow_stdin=None, stop_on_error=True,
                 interrupt_timeout=None, idle_timeout=None, raise_on_no_idle=False, _header=None):
@@ -148,7 +148,16 @@ class IOLoopKernelClient(KernelClient):
         msg_id = super().execute(code, silent=silent, store_history=store_history,
               user_expressions=user_expressions, allow_stdin=allow_stdin,
               stop_on_error=stop_on_error, _header=_header)
-        # print("Sent execute_request", msg_id[:8])
+
+        f = self._execution_future(msg_id, interrupt_timeout, idle_timeout,
+                                   raise_on_no_idle)
+        f.jupyter_msg_id = msg_id
+        return f
+
+    @gen.coroutine
+    def _execution_future(self, msg_id,
+                          interrupt_timeout=None, idle_timeout=None,
+                          raise_on_no_idle=False):
         request_fut = self._request_future(msg_id)
         if not (interrupt_timeout or idle_timeout):
             return (yield from request_fut)
@@ -159,11 +168,13 @@ class IOLoopKernelClient(KernelClient):
                                                   self.interrupt)
 
         got_idle_fut = Future()
+
         def watch_for_idle(msg):
             if msg.header['msg_type'] == 'status' \
                     and msg.parent_header.get('msg_id') == msg_id \
                     and msg.content['execution_state'] == 'idle':
                 got_idle_fut.set_result(msg)
+
         self.add_handler('iopub', watch_for_idle)
 
         try:
