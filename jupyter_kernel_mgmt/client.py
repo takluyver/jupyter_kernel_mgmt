@@ -143,6 +143,8 @@ class IOLoopKernelClient(KernelClient):
     def execute(self, code, silent=False, store_history=True,
                 user_expressions=None, allow_stdin=None, stop_on_error=True,
                 interrupt_timeout=None, idle_timeout=None, raise_on_no_idle=False, _header=None):
+        if allow_stdin is None:
+            allow_stdin = self.allow_stdin
         msg_id = super().execute(code, silent=silent, store_history=store_history,
               user_expressions=user_expressions, allow_stdin=allow_stdin,
               stop_on_error=stop_on_error, _header=_header)
@@ -519,6 +521,7 @@ class ClientInThread(Thread):
     client = None
     _exiting = False
     _ready_fut = None
+    allow_stdin = True
 
     def __init__(self, connection_info, manager=None, loop=None):
         super(ClientInThread, self).__init__()
@@ -591,6 +594,8 @@ class ClientInThread(Thread):
     @inherit_docstring(KernelClient)
     def execute(self, code, silent=False, store_history=True,
                 user_expressions=None, allow_stdin=None, stop_on_error=True):
+        if allow_stdin is None:
+            allow_stdin = self.allow_stdin
         msg = execute_request(code, silent=silent, store_history=store_history,
               user_expressions=user_expressions, allow_stdin=allow_stdin,
               stop_on_error=stop_on_error)
