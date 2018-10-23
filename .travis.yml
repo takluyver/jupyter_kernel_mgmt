@@ -5,7 +5,7 @@ python:
     - 3.4
 install:
   - pip install --upgrade setuptools pip
-  - pip install --upgrade --pre -e .[test] pytest-cov pytest-warnings codecov
+  - pip install --upgrade -e .[test] pytest-cov codecov
 script:
   - py.test --cov jupyter_kernel_mgmt jupyter_kernel_mgmt
 after_success:
