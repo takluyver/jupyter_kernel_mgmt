@@ -330,11 +330,8 @@ class KernelClient(object):
         self.messaging.send('shell', msg)
         return msg.header['msg_id']
 
-    def _handle_kernel_info_reply(self, msg):
-        """handle kernel info reply
-
-        sets protocol adaptation version. This might
-        be run from a separate thread.
+    def _setup_protocol_adaptor(self, msg):
+        """Sets protocol version adaptation from kernel_info_reply
         """
         adapt_version = int(msg.content['protocol_version'].split('.')[0])
         if adapt_version != major_protocol_version:

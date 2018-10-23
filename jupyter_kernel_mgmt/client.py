@@ -45,6 +45,10 @@ class IOLoopKernelClient(KernelClient):
     Use ClientInThread to run this in a separate thread alongside your
     application.
     """
+    # kernel_info_dict will be usable after .wait_for_ready() is done.
+    kernel_info_dict = None
+    _protocol_adaptor_done = False
+
     def __init__(self, connection_info, manager=None):
         super(IOLoopKernelClient, self).__init__(connection_info, manager)
         self.ioloop = ioloop.IOLoop.current()
@@ -52,7 +56,7 @@ class IOLoopKernelClient(KernelClient):
         self._iopub_ready = False
         self.handlers = {
             'iopub': [self._set_iopub_ready],
-            'shell': [self._auto_adapt, self._fulfil_request],
+            'shell': [self._update_kernel_info, self._fulfil_request],
             'stdin': [],
             'control': [self._fulfil_request],
         }
@@ -78,12 +82,18 @@ class IOLoopKernelClient(KernelClient):
     def _debug_log(self, channel, msg):
         print(channel, msg.header['msg_id'][:8], msg.header['msg_type'], 'parent:', msg.parent_header.get('msg_id', '-')[:8])
 
-    def _auto_adapt(self, msg):
-        """Use the first kernel_info_reply to set up protocol version adaptation
+    def _update_kernel_info(self, msg):
+        """Update self.kernel_info_dict on any kernel_info_reply.
+
+        Also set up protocol adaptation on the first kernel_info_reply.
         """
-        if msg.header['msg_type'] == 'kernel_info_reply':
-            self._handle_kernel_info_reply(msg)
-            self.remove_handler('shell', self._auto_adapt)
+        if msg.header['msg_type'] == 'kernel_info_reply' \
+                and msg.content['status'] == 'ok':
+            self.kernel_info_dict = msg.content
+
+            if not self._protocol_adaptor_done:
+                self._setup_protocol_adaptor(msg)
+                self._protocol_adaptor_done = True
 
     def _request_future(self, msg_id):
         self.request_futures[msg_id] = f = Future()
