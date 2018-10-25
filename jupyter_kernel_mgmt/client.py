@@ -106,11 +106,7 @@ class IOLoopKernelClient(KernelClient):
             parent_id = msg.parent_header.get('msg_id')
             parent_future = self.request_futures.pop(parent_id, None)
             if parent_future and not parent_future.cancelled():
-                if msg.content.get('status', 'ok') == 'error':
-                    e = ErrorInKernel(msg)
-                    parent_future.set_exception(e)
-                else:
-                    parent_future.set_result(msg)
+                parent_future.set_result(msg)
 
     def _handle_recv(self, channel, wire_msg):
         """Callback for stream.on_recv.
@@ -188,10 +184,8 @@ class IOLoopKernelClient(KernelClient):
         self.add_handler('iopub', watch_for_idle)
 
         try:
-            try:
-                reply = yield from request_fut
-            except ErrorInKernel as e:
-                reply = e.reply_msg
+            reply = yield from request_fut
+
             if interrupt_cb is not None:
                 self.ioloop.remove_timeout(interrupt_cb)
 
@@ -208,8 +202,6 @@ class IOLoopKernelClient(KernelClient):
         finally:
             self.remove_handler('iopub', watch_for_idle)
 
-        if reply.content.get('status', 'ok') == 'error':
-            raise ErrorInKernel(reply)
         return reply
 
     def complete(self, code, cursor_pos=None, _header=None):
