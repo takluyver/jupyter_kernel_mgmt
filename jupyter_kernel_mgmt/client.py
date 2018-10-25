@@ -305,8 +305,13 @@ def waiting_for_reply(method):
         if not reply:
             return method(self.loop_client, *args,  **kwargs)
         loop = self.loop_client.ioloop
-        return loop.run_sync(lambda: method(self.loop_client, *args, **kwargs),
+        try:
+            return loop.run_sync(lambda: method(self.loop_client, *args, **kwargs),
                                     timeout=timeout)
+        except ioloop.TimeoutError:
+            # Translate tornado TimeoutError to base Python
+            raise TimeoutError("Timed out waiting for {} reply after {} seconds"
+                               .format(method.__name__, timeout))
 
     if not method.__doc__:
         # python -OO removes docstrings,
@@ -360,7 +365,11 @@ class BlockingKernelClient:
 
     def wait_for_ready(self, timeout=None):
         loop = self.loop_client.ioloop
-        loop.run_sync(lambda: self.loop_client.wait_for_ready(), timeout=timeout)
+        try:
+            loop.run_sync(lambda: self.loop_client.wait_for_ready(), timeout=timeout)
+        except ioloop.TimeoutError:
+            raise TimeoutError("Kernel client wasn't ready in {} seconds"
+                               .format(timeout))
 
     @property
     def kernel_info_dict(self):
