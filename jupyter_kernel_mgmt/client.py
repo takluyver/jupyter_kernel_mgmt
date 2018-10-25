@@ -362,6 +362,11 @@ class BlockingKernelClient:
         loop = self.loop_client.ioloop
         loop.run_sync(lambda: self.loop_client.wait_for_ready(), timeout=timeout)
 
+    @property
+    def kernel_info_dict(self):
+        """Kernel info, available after .wait_for_ready()"""
+        return self.loop_client.kernel_info_dict
+
     def input(self, string, parent=None):
         self.loop_client.input(string, parent=parent)
 
