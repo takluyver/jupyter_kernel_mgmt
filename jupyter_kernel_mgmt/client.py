@@ -11,7 +11,6 @@ from functools import partial, wraps
 from getpass import getpass
 import sys
 from threading import Thread, Event
-import time
 from tornado.concurrent import Future
 from tornado import gen
 from tornado import ioloop
@@ -29,15 +28,6 @@ from .util import inherit_docstring
 
 DEBUG_LOGGING = False
 
-
-class ErrorInKernel(Exception):
-    def __init__(self, reply_msg):
-        self.reply_msg = reply_msg
-
-    def __str__(self):
-        c = self.reply_msg.content
-        return '\n'.join(c.get('traceback', [])
-                         + ['{}: {}'.format(c.get('ename', 'ERROR'), c.get('evalue', ''))])
 
 class IOLoopKernelClient(KernelClient):
     """Uses a zmq/tornado IOLoop to handle received messages and fire callbacks.
