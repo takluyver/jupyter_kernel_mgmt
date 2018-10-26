@@ -50,9 +50,10 @@ class KernelSpecProvider(KernelProviderBase):
             spec = self.ksm._get_kernel_spec_by_name(name, resdir)
             yield name, {
                 # TODO: get full language info
-                'language': {'name': spec.language},
+                'language_info': {'name': spec.language},
                 'display_name': spec.display_name,
                 'argv': spec.argv,
+                'resource_dir': spec.resource_dir,
             }
 
     def launch(self, name, cwd=None):
@@ -83,7 +84,7 @@ class IPykernelProvider(KernelProviderBase):
             return {
                 'spec': get_kernel_dict(),
                 'language_info': IPythonKernel.language_info,
-                'resources_dir': RESOURCES,
+                'resource_dir': RESOURCES,
             }
 
     def find_kernels(self):
@@ -91,9 +92,10 @@ class IPykernelProvider(KernelProviderBase):
 
         if info:
             yield 'kernel', {
-                'language': info['language_info'],
+                'language_info': info['language_info'],
                 'display_name': info['spec']['display_name'],
                 'argv': info['spec']['argv'],
+                'resource_dir': info['resource_dir'],
             }
 
     def launch(self, name, cwd=None):
