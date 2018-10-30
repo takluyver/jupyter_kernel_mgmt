@@ -42,8 +42,8 @@ class KernelSpecProvider(KernelProviderBase):
     """
     id = 'spec'
 
-    def __init__(self):
-        self.ksm = KernelSpecManager()
+    def __init__(self, search_path=None):
+        self.ksm = KernelSpecManager(kernel_dirs=search_path)
 
     def find_kernels(self):
         for name, resdir in self.ksm.find_kernel_specs().items():

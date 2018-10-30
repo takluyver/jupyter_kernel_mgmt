@@ -112,7 +112,9 @@ class KernelSpecManager:
     def __init__(self, user_kernel_dir=None, kernel_dirs=None):
         super().__init__()
         self.user_kernel_dir = user_kernel_dir or self._user_kernel_dir_default()
-        self.kernel_dirs = kernel_dirs or self._kernel_dirs_default()
+        if kernel_dirs is None:
+            kernel_dirs = self._kernel_dirs_default()
+        self.kernel_dirs = kernel_dirs
 
     @staticmethod
     def _user_kernel_dir_default():
