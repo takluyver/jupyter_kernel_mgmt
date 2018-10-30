@@ -3,7 +3,7 @@ import entrypoints
 import logging
 import six
 
-from .kernelspec import KernelSpecManager
+from .kernelspec import KernelSpecManager, KernelSpec
 from .subproc import SubprocessKernelLauncher
 
 log = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class KernelSpecProvider(KernelProviderBase):
 
     def find_kernels(self):
         for name, resdir in self.ksm.find_kernel_specs().items():
-            spec = self.ksm._get_kernel_spec_by_name(name, resdir)
+            spec = KernelSpec.from_resource_dir(resdir)
             yield name, {
                 # TODO: get full language info
                 'language_info': {'name': spec.language},

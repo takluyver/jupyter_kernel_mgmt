@@ -12,16 +12,12 @@ import warnings
 
 pjoin = os.path.join
 
-from ipython_genutils.py3compat import PY3
 from traitlets import (
-    HasTraits, List, Unicode, Dict, Set, Bool, Type, CaselessStrEnum
+    HasTraits, List, Unicode, Dict, CaselessStrEnum
 )
 from traitlets.config import LoggingConfigurable
 
 from jupyter_core.paths import jupyter_data_dir, jupyter_path, SYSTEM_JUPYTER_PATH
-
-
-NATIVE_KERNEL_NAME = 'python3' if PY3 else 'python2'
 
 
 class KernelSpec(HasTraits):
@@ -152,22 +148,6 @@ class KernelSpecManager(LoggingConfigurable):
         return d
         # TODO: Caching?
 
-    def _get_kernel_spec_by_name(self, kernel_name, resource_dir):
-        """ Returns a :class:`KernelSpec` instance for a given kernel_name
-        and resource_dir.
-        """
-        if kernel_name == NATIVE_KERNEL_NAME:
-            try:
-                from ipykernel.kernelspec import RESOURCES, get_kernel_dict
-            except ImportError:
-                # It should be impossible to reach this, but let's play it safe
-                pass
-            else:
-                if resource_dir == RESOURCES:
-                    return KernelSpec(resource_dir=resource_dir, **get_kernel_dict())
-
-        return KernelSpec.from_resource_dir(resource_dir)
-
     def get_kernel_spec(self, kernel_name):
         """Returns a :class:`KernelSpec` instance for the given kernel_name.
 
@@ -179,7 +159,7 @@ class KernelSpecManager(LoggingConfigurable):
         except KeyError:
             raise NoSuchKernel(kernel_name)
 
-        return self._get_kernel_spec_by_name(kernel_name, resource_dir)
+        return KernelSpec.from_resource_dir(resource_dir)
 
     def get_all_specs(self):
         """Returns a dict mapping kernel names to kernelspecs.
@@ -197,7 +177,7 @@ class KernelSpecManager(LoggingConfigurable):
         d = self.find_kernel_specs()
         return {kname: {
                 "resource_dir": d[kname],
-                "spec": self._get_kernel_spec_by_name(kname, d[kname]).to_dict()
+                "spec": KernelSpec.from_resource_dir(d[kname]).to_dict()
                 } for kname in d}
 
     def remove_kernel_spec(self, name):
