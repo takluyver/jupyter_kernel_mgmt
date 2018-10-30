@@ -112,13 +112,6 @@ class NoSuchKernel(KeyError):
 
 
 class KernelSpecManager(LoggingConfigurable):
-
-    kernel_spec_class = Type(KernelSpec, config=True,
-        help="""The kernel spec class.  This is configurable to allow
-        subclassing of the KernelSpecManager for customized behavior.
-        """
-    )
-
     data_dir = Unicode()
     def _data_dir_default(self):
         return jupyter_data_dir()
@@ -127,12 +120,6 @@ class KernelSpecManager(LoggingConfigurable):
     def _user_kernel_dir_default(self):
         return pjoin(self.data_dir, 'kernels')
 
-    whitelist = Set(config=True,
-        help="""Whitelist of allowed kernel names.
-
-        By default, all installed kernels are allowed.
-        """
-    )
     kernel_dirs = List(
         help="List of kernel directories to search. Later ones take priority over earlier."
     )
@@ -162,9 +149,6 @@ class KernelSpecManager(LoggingConfigurable):
                     self.log.debug("Found kernel %s in %s", kname, kernel_dir)
                     d[kname] = spec
 
-        if self.whitelist:
-            # filter if there's a whitelist
-            d = {name:spec for name,spec in d.items() if name in self.whitelist}
         return d
         # TODO: Caching?
 
@@ -180,9 +164,9 @@ class KernelSpecManager(LoggingConfigurable):
                 pass
             else:
                 if resource_dir == RESOURCES:
-                    return self.kernel_spec_class(resource_dir=resource_dir, **get_kernel_dict())
+                    return KernelSpec(resource_dir=resource_dir, **get_kernel_dict())
 
-        return self.kernel_spec_class.from_resource_dir(resource_dir)
+        return KernelSpec.from_resource_dir(resource_dir)
 
     def get_kernel_spec(self, kernel_name):
         """Returns a :class:`KernelSpec` instance for the given kernel_name.
