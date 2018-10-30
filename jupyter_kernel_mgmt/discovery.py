@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 import entrypoints
+from json import JSONDecodeError
 import logging
 import six
 
@@ -47,7 +48,12 @@ class KernelSpecProvider(KernelProviderBase):
 
     def find_kernels(self):
         for name, resdir in self.ksm.find_kernel_specs().items():
-            spec = KernelSpec.from_resource_dir(resdir)
+            try:
+                spec = KernelSpec.from_resource_dir(resdir)
+            except JSONDecodeError:
+                log.warning("Failed to parse kernelspec in %s", resdir)
+                continue
+
             yield name, {
                 # TODO: get full language info
                 'language_info': {'name': spec.language},
