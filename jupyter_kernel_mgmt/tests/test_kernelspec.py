@@ -101,12 +101,12 @@ class KernelSpecTests(unittest.TestCase):
         self.addCleanup(td.cleanup)
         capture = StringIO()
         handler = StreamHandler(capture)
-        self.ksm.log.addHandler(handler)
+        kernelspec.log.addHandler(handler)
         self.ksm.install_kernel_spec(self.installable_kernel,
                                      kernel_name='tstinstalled',
                                      prefix=td.name)
         captured = capture.getvalue()
-        self.ksm.log.removeHandler(handler)
+        kernelspec.log.removeHandler(handler)
         self.assertIn("may not be found", captured)
         self.assertNotIn('tstinstalled', self.ksm.find_kernel_specs())
 
@@ -117,12 +117,12 @@ class KernelSpecTests(unittest.TestCase):
         # Run it again, no warning this time because we've added it to the path
         capture = StringIO()
         handler = StreamHandler(capture)
-        self.ksm.log.addHandler(handler)
+        kernelspec.log.addHandler(handler)
         self.ksm.install_kernel_spec(self.installable_kernel,
                                      kernel_name='tstinstalled',
                                      prefix=td.name)
         captured = capture.getvalue()
-        self.ksm.log.removeHandler(handler)
+        kernelspec.log.removeHandler(handler)
         self.assertNotIn("may not be found", captured)
 
     @pytest.mark.skipif(

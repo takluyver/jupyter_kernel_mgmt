@@ -5,17 +5,18 @@
 
 import io
 import json
+import logging
 import os
 import re
 import shutil
 import warnings
 
 pjoin = os.path.join
+log = logging.getLogger(__name__)
 
 from traitlets import (
     HasTraits, List, Unicode, Dict, CaselessStrEnum
 )
-from traitlets.config import LoggingConfigurable
 
 from jupyter_core.paths import jupyter_data_dir, jupyter_path, SYSTEM_JUPYTER_PATH
 
@@ -107,19 +108,18 @@ class NoSuchKernel(KeyError):
         return "No such kernel named {}".format(self.name)
 
 
-class KernelSpecManager(LoggingConfigurable):
-    data_dir = Unicode()
-    def _data_dir_default(self):
-        return jupyter_data_dir()
+class KernelSpecManager:
+    def __init__(self, user_kernel_dir=None, kernel_dirs=None):
+        super().__init__()
+        self.user_kernel_dir = user_kernel_dir or self._user_kernel_dir_default()
+        self.kernel_dirs = kernel_dirs or self._kernel_dirs_default()
 
-    user_kernel_dir = Unicode()
-    def _user_kernel_dir_default(self):
-        return pjoin(self.data_dir, 'kernels')
+    @staticmethod
+    def _user_kernel_dir_default():
+        return pjoin(jupyter_data_dir(), 'kernels')
 
-    kernel_dirs = List(
-        help="List of kernel directories to search. Later ones take priority over earlier."
-    )
-    def _kernel_dirs_default(self):
+    @staticmethod
+    def _kernel_dirs_default():
         dirs = jupyter_path('kernels')
         # At some point, we should stop adding .ipython/kernels to the path,
         # but the cost to keeping it is very small.
@@ -142,7 +142,7 @@ class KernelSpecManager(LoggingConfigurable):
             kernels = _list_kernels_in(kernel_dir)
             for kname, spec in kernels.items():
                 if kname not in d:
-                    self.log.debug("Found kernel %s in %s", kname, kernel_dir)
+                    log.debug("Found kernel %s in %s", kname, kernel_dir)
                     d[kname] = spec
 
         return d
@@ -187,7 +187,7 @@ class KernelSpecManager(LoggingConfigurable):
         """
         specs = self.find_kernel_specs()
         spec_dir = specs[name]
-        self.log.debug("Removing %s", spec_dir)
+        log.debug("Removing %s", spec_dir)
         if os.path.islink(spec_dir):
             os.remove(spec_dir)
         else:
@@ -236,20 +236,20 @@ class KernelSpecManager(LoggingConfigurable):
             )
 
         destination = self._get_destination_dir(kernel_name, user=user, prefix=prefix)
-        self.log.debug('Installing kernelspec in %s', destination)
+        log.debug('Installing kernelspec in %s', destination)
 
         kernel_dir = os.path.dirname(destination)
         if kernel_dir not in self.kernel_dirs:
-            self.log.warning("Installing to %s, which is not in %s. The kernelspec may not be found.",
+            log.warning("Installing to %s, which is not in %s. The kernelspec may not be found.",
                 kernel_dir, self.kernel_dirs,
             )
 
         if os.path.isdir(destination):
-            self.log.info('Removing existing kernelspec in %s', destination)
+            log.info('Removing existing kernelspec in %s', destination)
             shutil.rmtree(destination)
 
         shutil.copytree(source_dir, destination)
-        self.log.info('Installed kernelspec %s in %s', kernel_name, destination)
+        log.info('Installed kernelspec %s in %s', kernel_name, destination)
         return destination
 
 
