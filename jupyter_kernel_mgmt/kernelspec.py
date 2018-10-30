@@ -119,12 +119,6 @@ class KernelSpecManager(LoggingConfigurable):
         """
     )
 
-    ensure_native_kernel = Bool(True, config=True,
-        help="""If there is no Python kernelspec registered and the IPython
-        kernel is available, ensure it is added to the spec list.
-        """
-    )
-
     data_dir = Unicode()
     def _data_dir_default(self):
         return jupyter_data_dir()
@@ -167,15 +161,6 @@ class KernelSpecManager(LoggingConfigurable):
                 if kname not in d:
                     self.log.debug("Found kernel %s in %s", kname, kernel_dir)
                     d[kname] = spec
-
-        if self.ensure_native_kernel and NATIVE_KERNEL_NAME not in d:
-            try:
-                from ipykernel.kernelspec import RESOURCES
-                self.log.debug("Native kernel (%s) available from %s",
-                               NATIVE_KERNEL_NAME, RESOURCES)
-                d[NATIVE_KERNEL_NAME] = RESOURCES
-            except ImportError:
-                self.log.warning("Native kernel (%s) is not available", NATIVE_KERNEL_NAME)
 
         if self.whitelist:
             # filter if there's a whitelist
@@ -236,12 +221,7 @@ class KernelSpecManager(LoggingConfigurable):
 
         Returns the path that was deleted.
         """
-        save_native = self.ensure_native_kernel
-        try:
-            self.ensure_native_kernel = False
-            specs = self.find_kernel_specs()
-        finally:
-            self.ensure_native_kernel = save_native
+        specs = self.find_kernel_specs()
         spec_dir = specs[name]
         self.log.debug("Removing %s", spec_dir)
         if os.path.islink(spec_dir):
