@@ -272,13 +272,6 @@ class KernelSpecManager(LoggingConfigurable):
         self.log.info('Installed kernelspec %s in %s', kernel_name, destination)
         return destination
 
-    def install_native_kernel_spec(self, user=False):
-        """DEPRECATED: Use ipykernel.kenelspec.install"""
-        warnings.warn("install_native_kernel_spec is deprecated."
-            " Use ipykernel.kernelspec import install.", stacklevel=2)
-        from ipykernel.kernelspec import install
-        install(self, user=user)
-
 
 def find_kernel_specs():
     """Returns a dict mapping kernel names to resource directories."""
@@ -298,7 +291,3 @@ def install_kernel_spec(source_dir, kernel_name=None, user=False, replace=False,
 
 install_kernel_spec.__doc__ = KernelSpecManager.install_kernel_spec.__doc__
 
-def install_native_kernel_spec(user=False):
-    return KernelSpecManager().install_native_kernel_spec(user=user)
-
-install_native_kernel_spec.__doc__ = KernelSpecManager.install_native_kernel_spec.__doc__
