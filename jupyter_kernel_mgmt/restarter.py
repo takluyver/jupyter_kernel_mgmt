@@ -31,12 +31,8 @@ class KernelRestarterBase(LoggingConfigurable):
         help="""The number of consecutive autorestarts before the kernel is presumed dead."""
     )
 
-    random_ports_until_alive = Bool(True, config=True,
-        help="""Whether to choose new random ports when restarting before the kernel is alive."""
-    )
     _restarting = False
     _restart_count = 0
-    _initial_startup = True
 
     def __init__(self, kernel_manager, kernel_type, kernel_finder=None, **kw):
         super(KernelRestarterBase, self).__init__(**kw)
@@ -101,28 +97,18 @@ class KernelRestarterBase(LoggingConfigurable):
             self._restart_count = 0
             self.stop()
         else:
-            newports = self.random_ports_until_alive and self._initial_startup
-            if newports:
-                cwd = getattr(self.kernel_manager, 'cwd', None)  # :-/
-                self.log.info("KernelRestarter: starting new manager (%i/%i)",
-                              self._restart_count, self.restart_limit)
-                self.kernel_manager.cleanup()
-                conn_info, mgr = self.kernel_finder.launch(
-                    self.kernel_type, cwd)
-                self._fire_callbacks('restarted', {
-                    'new_manager': True,
-                    'connection_info': conn_info,
-                    'manager': mgr,
-                })
-                self.kernel_manager = mgr
-            else:
-                self.log.info(
-                    'KernelRestarter: restarting kernel (%i/%i), keeping ports',
-                    self._restart_count, self.restart_limit)
-                self.kernel_manager.relaunch()
-                self._fire_callbacks('restarted', {
-                    'new_manager': False,
-                })
+            cwd = getattr(self.kernel_manager, 'cwd', None)  # :-/
+            self.log.info("KernelRestarter: starting new manager (%i/%i)",
+                          self._restart_count, self.restart_limit)
+            self.kernel_manager.cleanup()
+            conn_info, mgr = self.kernel_finder.launch(
+                self.kernel_type, cwd)
+            self._fire_callbacks('restarted', {
+                'new_manager': True,
+                'connection_info': conn_info,
+                'manager': mgr,
+            })
+            self.kernel_manager = mgr
             self._restarting = True
 
 
@@ -133,8 +119,6 @@ class KernelRestarterBase(LoggingConfigurable):
             self._fire_callbacks('died', {})
             self.do_restart()
         else:
-            if self._initial_startup:
-                self._initial_startup = False
             if self._restarting:
                 self.log.debug("KernelRestarter: restart apparently succeeded")
             self._restarting = False

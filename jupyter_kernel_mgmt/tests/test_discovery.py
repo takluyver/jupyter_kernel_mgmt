@@ -21,7 +21,7 @@ class DummyKernelProvider(discovery.KernelProviderBase):
         yield 'sample', {'argv': ['dummy_kernel']}
 
     def launch(self, name, cwd=None):
-        return DummyKernelManager()
+        return {}, DummyKernelManager()
 
 class DummyKernelManager(KernelManagerABC):
     _alive = True
@@ -49,13 +49,11 @@ class DummyKernelManager(KernelManagerABC):
         """Return a dictionary of connection information"""
         return {}
 
-    def relaunch(self):
-        return True
 
 def test_meta_kernel_finder():
     kf = discovery.KernelFinder(providers=[DummyKernelProvider()])
     assert list(kf.find_kernels()) == \
         [('dummy/sample', {'argv': ['dummy_kernel']})]
 
-    launcher = kf.launch('dummy/sample')
-    assert isinstance(launcher, DummyKernelManager)
+    conn_info, manager = kf.launch('dummy/sample')
+    assert isinstance(manager, DummyKernelManager)

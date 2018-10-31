@@ -105,16 +105,6 @@ class ManagerClient(KernelManagerABC):
         """Return a dictionary of connection information"""
         return self.connection_info
 
-    def relaunch(self):
-        """Attempt to relaunch the kernel using the same ports.
-
-        This is meant to be called after the managed kernel has died. Calling
-        it while the kernel is still alive has undefined behaviour.
-
-        Returns True if this manager supports that.
-        """
-        return False
-
 
 class KernelClient(object):
     """Communicates with a single kernel on any host via zmq channels.
