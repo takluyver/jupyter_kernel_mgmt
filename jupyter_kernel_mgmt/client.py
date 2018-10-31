@@ -38,26 +38,25 @@ class IOLoopKernelClient(KernelClient):
     # kernel_info_dict will be usable after .wait_for_ready() is done.
     kernel_info_dict = None
     _protocol_adaptor_done = False
+    handler_channels = frozenset({'iopub', 'shell', 'stdin', 'control'})
 
     def __init__(self, connection_info, manager=None):
         super(IOLoopKernelClient, self).__init__(connection_info, manager)
         self.ioloop = ioloop.IOLoop.current()
         self.request_futures = {}
         self._iopub_ready = False
-        self.handlers = {
-            'iopub': [self._set_iopub_ready],
-            'shell': [self._update_kernel_info, self._fulfil_request],
-            'stdin': [],
-            'control': [self._fulfil_request],
-        }
+        self.handlers = []
         self.streams = {}
         for channel, socket in self.messaging.sockets.items():
             self.streams[channel] = s = zmqstream.ZMQStream(socket, self.ioloop)
             s.on_recv(partial(self._handle_recv, channel))
 
+        self.add_handler(self._set_iopub_ready, 'iopub')
+        self.add_handler(self._update_kernel_info, 'shell')
+        self.add_handler(self._fulfil_request, {'shell', 'control'})
+
         if DEBUG_LOGGING:
-            for channel in ('iopub', 'shell', 'stdin', 'control'):
-                self.add_handler(channel, partial(self._debug_log, channel))
+            self.add_handler(self._debug_log, {'iopub', 'shell', 'stdin', 'control'})
 
     def close(self):
         """Close the client's sockets & streams.
@@ -69,10 +68,11 @@ class IOLoopKernelClient(KernelClient):
         if self.hb_monitor:
             self.hb_monitor.stop()
 
-    def _debug_log(self, channel, msg):
+    @staticmethod
+    def _debug_log(msg, channel):
         print(channel, msg.header['msg_id'][:8], msg.header['msg_type'], 'parent:', msg.parent_header.get('msg_id', '-')[:8])
 
-    def _update_kernel_info(self, msg):
+    def _update_kernel_info(self, msg, _channel):
         """Update self.kernel_info_dict on any kernel_info_reply.
 
         Also set up protocol adaptation on the first kernel_info_reply.
@@ -90,7 +90,7 @@ class IOLoopKernelClient(KernelClient):
         f.jupyter_msg_id = msg_id
         return f
 
-    def _fulfil_request(self, msg):
+    def _fulfil_request(self, msg, _channel):
         """If msg is a reply, set the result for the request future."""
         if msg.header['msg_type'].endswith('_reply'):
             parent_id = msg.parent_header.get('msg_id')
@@ -108,31 +108,65 @@ class IOLoopKernelClient(KernelClient):
 
     def _call_handlers(self, channel, msg):
         # [:] copies the list - handlers that remove themselves (or add other
-        # handlers) will not mess up iterating over it.
-        for handler in self.handlers[channel][:]:
-            try:
-                handler(msg)
-            except Exception as e:
-                self.log.error("Exception from message handler %r", handler,
-                               exc_info=e)
+        # handlers) will not mess up iterating over the remaining handlers.
+        for handler, handles_channels in self.handlers[:]:
+            if channel in handles_channels:
+                try:
+                    handler(msg, channel)
+                except Exception as e:
+                    self.log.error("Exception from message handler %r", handler,
+                                   exc_info=e)
 
-    def add_handler(self, channel, handler):
-        """Add a callback for received messages on one channel.
+    def add_handler(self, handler, channels):
+        """Add a callback for received messages on one or more channels.
 
         Parameters
         ----------
 
-        channel : str
-          One of 'shell', 'iopub', 'stdin' or 'control'
         handler : function
           Will be called for each message received with the message dictionary
           as a single argument.
+        channels : set or str
+          Channel names: 'shell', 'iopub', 'stdin' or 'control'
         """
-        self.handlers[channel].append(handler)
+        if isinstance(channels, str):
+            channels = {channels}
+        invalid_channels = channels - self.handler_channels
+        if invalid_channels:
+            raise ValueError("Invalid channel names: %s" % invalid_channels)
 
-    def remove_handler(self, channel, handler):
+        for func, channels_set in self.handlers:
+            if func == handler:
+                channels_set.update(channels)
+                break
+        else:
+            self.handlers.append((handler, channels))
+        # _, channels_set = self.handlers.setdefault(id(handler), (handler, set()))
+        # channels_set.update(channels)
+        return handler
+
+    def remove_handler(self, handler, channels=None):
         """Remove a previously registered callback."""
-        self.handlers[channel].remove(handler)
+        for ix, (func, channels_set) in enumerate(self.handlers):
+            if func == handler:
+                break
+        else:
+            # Handler not registered; ignore
+            return
+
+        if channels is None:
+            del self.handlers[ix]
+            return
+
+        if isinstance(channels, str):
+            channels = {channels}
+        invalid_channels = channels - self.handler_channels
+        if invalid_channels:
+            raise ValueError("Invalid channel names: %s" % invalid_channels)
+
+        channels_set -= channels
+        if not channels_set:
+            del self.handlers[ix]
 
     # Methods to send specific messages.
     # These requests all return a Future, which completes when the reply arrives
@@ -171,7 +205,7 @@ class IOLoopKernelClient(KernelClient):
                     and msg.content['execution_state'] == 'idle':
                 got_idle_fut.set_result(msg)
 
-        self.add_handler('iopub', watch_for_idle)
+        self.add_handler(watch_for_idle, 'iopub')
 
         try:
             reply = yield from request_fut
@@ -190,7 +224,7 @@ class IOLoopKernelClient(KernelClient):
                     if raise_on_no_idle:
                         raise
         finally:
-            self.remove_handler('iopub', watch_for_idle)
+            self.remove_handler(watch_for_idle)
 
         return reply
 
@@ -276,9 +310,9 @@ class IOLoopKernelClient(KernelClient):
                 return
             yield from gen.sleep(0.01)
 
-    def _set_iopub_ready(self, msg):
+    def _set_iopub_ready(self, _msg, _channel):
         self._iopub_ready = True
-        self.remove_handler('iopub', self._set_iopub_ready)
+        self.remove_handler(self._set_iopub_ready)
 
     def is_complete(self, code, _header=None):
         """Ask the kernel whether some code is complete and ready to execute."""
@@ -505,8 +539,10 @@ class BlockingKernelClient:
             # default: redisplay plain-text outputs
             output_hook = self._output_hook_default
 
-        self.loop_client.add_handler('stdin', stdin_hook)
-        self.loop_client.add_handler('iopub', output_hook)
+        stdin_handler = self.loop_client.add_handler(
+            lambda m, c: stdin_hook(m), 'stdin')
+        iopub_handler = self.loop_client.add_handler(
+            lambda m, c: output_hook(m), 'iopub')
 
         try:
             return self.execute(
@@ -522,8 +558,8 @@ class BlockingKernelClient:
                 raise_on_no_idle=raise_on_no_idle,
                )
         finally:
-            self.loop_client.remove_handler('stdin', stdin_hook)
-            self.loop_client.remove_handler('iopub', output_hook)
+            self.loop_client.remove_handler(stdin_handler)
+            self.loop_client.remove_handler(iopub_handler)
 
 
 class ClientInThread(Thread):
@@ -594,12 +630,12 @@ class ClientInThread(Thread):
             self.join()
 
     @inherit_docstring(IOLoopKernelClient)
-    def add_handler(self, channel, handler):
-        self.client.handlers[channel].append(handler)
+    def add_handler(self, handler, channels):
+        self.client.add_handler(handler, channels)
 
     @inherit_docstring(IOLoopKernelClient)
-    def remove_handler(self, channel, handler):
-        self.client.handlers[channel].remove(handler)
+    def remove_handler(self, handler, channels=None):
+        self.client.remove_handler(handler, channels)
 
     def _send(self, channel, msg):
         self.client.ioloop.add_callback(self.client.messaging.send, channel, msg)

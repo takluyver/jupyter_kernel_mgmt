@@ -38,9 +38,10 @@ class TestKernelClient(TestCase):
         self.kc.start()
         if not self.kc.kernel_responding.wait(10.0):
             raise RuntimeError("Failed to start kernel client")
-        self.kc.add_handler('shell', self.received['shell'].put)
-        self.kc.add_handler('iopub', self.received['iopub'].put)
+        self.kc.add_handler(self._queue_msg, {'shell', 'iopub'})
 
+    def _queue_msg(self, msg, channel):
+        self.received[channel].put(msg)
 
     def tearDown(self):
         self.kc.shutdown()
