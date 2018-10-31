@@ -43,7 +43,7 @@ class KernelRestarterBase(LoggingConfigurable):
         self.kernel_manager = kernel_manager
         self.kernel_type = kernel_type
         self.kernel_finder = kernel_finder or KernelFinder.from_entrypoints()
-        self.callbacks = dict(restart=[], dead=[])
+        self.callbacks = dict(died=[], restarted=[], failed=[])
 
     def start(self):
         """Start monitoring the kernel."""
@@ -53,36 +53,35 @@ class KernelRestarterBase(LoggingConfigurable):
         """Stop monitoring."""
         raise NotImplementedError("Must be implemented in a subclass")
 
-    def add_callback(self, f, event='restart'):
+    def add_callback(self, event, f):
         """register a callback to fire on a particular event
 
         Possible values for event:
 
-          'restart' (default): kernel has died, and will be restarted.
-          'dead': restart has failed, kernel will be left dead.
+          'died': the monitored kernel has died
+          'restarted': a restart has been attempted (this does not necessarily
+                       mean that the new kernel is usable).
+          'failed': *restart_limit* attempts have failed in quick succession,
+                    and the restarter is giving up.
 
         """
         self.callbacks[event].append(f)
 
-    def remove_callback(self, f, event='restart'):
-        """unregister a callback to fire on a particular event
+    def remove_callback(self, event, f):
+        """unregister a callback from a particular event
 
-        Possible values for event:
-
-          'restart' (default): kernel has died, and will be restarted.
-          'dead': restart has failed, kernel will be left dead.
-
+        Possible values for *event* are the same as in :meth:`add_callback`.
         """
         try:
             self.callbacks[event].remove(f)
         except ValueError:
             pass
 
-    def _fire_callbacks(self, event):
+    def _fire_callbacks(self, event, data):
         """fire our callbacks for a particular event"""
         for callback in self.callbacks[event]:
             try:
-                callback()
+                callback(data)
             except Exception as e:
                 self.log.error("KernelRestarter: %s callback %r failed", event, callback, exc_info=True)
 
@@ -95,31 +94,43 @@ class KernelRestarterBase(LoggingConfigurable):
 
         if self._restart_count >= self.restart_limit:
             self.log.warning("KernelRestarter: restart failed")
-            self._fire_callbacks('dead')
+            self._fire_callbacks('failed', {
+                'restart_count': self._restart_count,
+            })
             self._restarting = False
             self._restart_count = 0
             self.stop()
         else:
             newports = self.random_ports_until_alive and self._initial_startup
-            self._fire_callbacks('restart')
             if newports:
                 cwd = getattr(self.kernel_manager, 'cwd', None)  # :-/
                 self.log.info("KernelRestarter: starting new manager (%i/%i)",
                               self._restart_count, self.restart_limit)
                 self.kernel_manager.cleanup()
-                self.kernel_manager = self.kernel_finder.launch(
+                conn_info, mgr = self.kernel_finder.launch(
                     self.kernel_type, cwd)
+                self._fire_callbacks('restarted', {
+                    'new_manager': True,
+                    'connection_info': conn_info,
+                    'manager': mgr,
+                })
+                self.kernel_manager = mgr
             else:
                 self.log.info(
                     'KernelRestarter: restarting kernel (%i/%i), keeping ports',
                     self._restart_count, self.restart_limit)
                 self.kernel_manager.relaunch()
+                self._fire_callbacks('restarted', {
+                    'new_manager': False,
+                })
             self._restarting = True
+
 
     def poll(self):
         if self.debug:
             self.log.debug('Polling kernel...')
         if not self.kernel_manager.is_alive():
+            self._fire_callbacks('died', {})
             self.do_restart()
         else:
             if self._initial_startup:
