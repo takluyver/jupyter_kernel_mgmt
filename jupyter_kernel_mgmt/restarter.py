@@ -49,7 +49,7 @@ class KernelRestarterBase(LoggingConfigurable):
         """Stop monitoring."""
         raise NotImplementedError("Must be implemented in a subclass")
 
-    def add_callback(self, event, f):
+    def add_callback(self, f, event):
         """register a callback to fire on a particular event
 
         Possible values for event:
@@ -63,7 +63,7 @@ class KernelRestarterBase(LoggingConfigurable):
         """
         self.callbacks[event].append(f)
 
-    def remove_callback(self, event, f):
+    def remove_callback(self, f, event):
         """unregister a callback from a particular event
 
         Possible values for *event* are the same as in :meth:`add_callback`.
