@@ -81,9 +81,9 @@ class KernelRestarterBase(LoggingConfigurable):
             except Exception as e:
                 self.log.error("KernelRestarter: %s callback %r failed", event, callback, exc_info=True)
 
-    def do_restart(self):
+    def do_restart(self, auto=False):
         """Called when the kernel has died"""
-        if self._restarting:
+        if auto and self._restarting:
             self._restart_count += 1
         else:
             self._restart_count = 1
@@ -104,7 +104,7 @@ class KernelRestarterBase(LoggingConfigurable):
             conn_info, mgr = self.kernel_finder.launch(
                 self.kernel_type, cwd)
             self._fire_callbacks('restarted', {
-                'new_manager': True,
+                'auto': auto,
                 'connection_info': conn_info,
                 'manager': mgr,
             })
@@ -117,7 +117,7 @@ class KernelRestarterBase(LoggingConfigurable):
             self.log.debug('Polling kernel...')
         if not self.kernel_manager.is_alive():
             self._fire_callbacks('died', {})
-            self.do_restart()
+            self.do_restart(auto=True)
         else:
             if self._restarting:
                 self.log.debug("KernelRestarter: restart apparently succeeded")
