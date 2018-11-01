@@ -1,8 +1,13 @@
 from abc import ABCMeta, abstractmethod
 import entrypoints
-from json import JSONDecodeError
 import logging
 import six
+
+try:
+    from json import JSONDecodeError
+except ImportError:
+    # JSONDecodeError is new in Python 3.5, so while we support 3.4:
+    JSONDecodeError = ValueError
 
 from .kernelspec import KernelSpecManager, KernelSpec
 from .subproc import SubprocessKernelLauncher
