@@ -142,3 +142,7 @@ class TornadoKernelRestarter(KernelRestarterBase):
             self._pcallback.stop()
             self._pcallback = None
 
+    def _fire_callbacks(self, event, data):
+        loop = ioloop.IOLoop.current()
+        for callback in self.callbacks[event]:
+            loop.add_callback(callback, data)
