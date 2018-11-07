@@ -65,6 +65,8 @@ class KernelSpecProvider(KernelProviderBase):
                 'display_name': spec.display_name,
                 'argv': spec.argv,
                 'resource_dir': spec.resource_dir,
+                'metadata': spec.metadata,
+                'env': spec.env,
             }
 
     def launch(self, name, cwd=None):
