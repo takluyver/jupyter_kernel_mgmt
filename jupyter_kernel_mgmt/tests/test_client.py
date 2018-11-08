@@ -33,7 +33,8 @@ class TestKernelClient(TestCase):
         kc = self.kc
 
         with capture_output() as io:
-            reply = kc.execute_interactive("print('hello')", timeout=TIMEOUT)
+            reply = kc.execute_interactive("print('hello')", timeout=TIMEOUT,
+                                           raise_on_no_idle=True)
         assert 'hello' in io.stdout
         assert reply.content['status'] == 'ok'
 
