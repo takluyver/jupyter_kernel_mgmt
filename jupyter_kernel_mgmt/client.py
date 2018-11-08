@@ -199,7 +199,7 @@ class IOLoopKernelClient(KernelClient):
 
         got_idle_fut = Future()
 
-        def watch_for_idle(msg):
+        def watch_for_idle(msg, _channel):
             if msg.header['msg_type'] == 'status' \
                     and msg.parent_header.get('msg_id') == msg_id \
                     and msg.content['execution_state'] == 'idle':
