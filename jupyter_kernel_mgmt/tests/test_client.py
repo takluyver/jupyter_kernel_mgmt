@@ -14,7 +14,6 @@ from jupyter_protocol.messages import Message
 from ..subproc.launcher import start_new_kernel
 from .utils import test_env
 
-from ipython_genutils.py3compat import string_types
 from IPython.utils.capture import capture_output
 
 TIMEOUT = 30
