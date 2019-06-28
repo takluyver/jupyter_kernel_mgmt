@@ -3,13 +3,7 @@ import entrypoints
 import logging
 import six
 
-try:
-    from json import JSONDecodeError
-except ImportError:
-    # JSONDecodeError is new in Python 3.5, so while we support 3.4:
-    JSONDecodeError = ValueError
-
-from .kernelspec import KernelSpecManager, KernelSpec
+from .kernelspec import KernelSpecManager, KernelSpec, DEFAULT_SPEC_PROVIDER
 from .subproc import SubprocessKernelLauncher
 
 log = logging.getLogger(__name__)
@@ -46,25 +40,20 @@ class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
 class KernelSpecProvider(KernelProviderBase):
     """Offers kernel types from installed kernelspec directories.
     """
-    id = 'spec'
+    id = DEFAULT_SPEC_PROVIDER
 
-    def __init__(self, search_path=None):
-        self.ksm = KernelSpecManager(kernel_dirs=search_path)
+    def __init__(self):
+        self.ksm = KernelSpecManager()
 
     def find_kernels(self):
-        for name, resdir in self.ksm.find_kernel_specs().items():
-            try:
-                spec = KernelSpec.from_resource_dir(resdir)
-            except JSONDecodeError:
-                log.warning("Failed to parse kernelspec in %s", resdir)
-                continue
-
+        for name, spec in self.ksm.get_kernel_specs(self.id).items():
             yield name, {
                 # TODO: get full language info
                 'language_info': {'name': spec.language},
                 'display_name': spec.display_name,
                 'argv': spec.argv,
                 'resource_dir': spec.resource_dir,
+                'metadata': spec.metadata,  # Add metadata for things like parameters info
             }
 
     def launch(self, name, cwd=None):

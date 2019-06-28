@@ -54,8 +54,12 @@ class KernelSpecTests(unittest.TestCase):
         with open(pjoin(self.installable_kernel, 'kernel.json'), 'w') as f:
             json.dump(sample_kernel_json, f)
 
+        kernelspec.KernelSpecCache.get_instance()._kernel_dirs = paths.jupyter_path('kernels')
+        kernelspec.KernelSpecCache.get_instance()._refresh()
+
     def tearDown(self):
         self.env_patch.stop()
+
 
     def test_find_kernel_specs(self):
         kernels = self.ksm.find_kernel_specs()
