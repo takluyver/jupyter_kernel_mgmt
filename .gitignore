@@ -17,3 +17,4 @@ __pycache__
 .cache
 .pytest_cache
 absolute.json
+.idea/

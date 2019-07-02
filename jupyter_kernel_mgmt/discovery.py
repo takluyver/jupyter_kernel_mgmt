@@ -14,6 +14,7 @@ from .subproc import SubprocessKernelLauncher
 
 log = logging.getLogger(__name__)
 
+
 class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
     id = None  # Should be a short string identifying the provider class.
 
@@ -43,18 +44,20 @@ class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
         """
         raise NotImplementedError()
 
+
 class KernelSpecProvider(KernelProviderBase):
     """Offers kernel types from installed kernelspec directories.
     """
     id = 'spec'
+    kernel_file = 'kernel.json'
 
     def __init__(self, search_path=None):
-        self.ksm = KernelSpecManager(kernel_dirs=search_path)
+        self.ksm = KernelSpecManager(kernel_dirs=search_path, kernel_file=self.kernel_file)
 
     def find_kernels(self):
         for name, resdir in self.ksm.find_kernel_specs().items():
             try:
-                spec = KernelSpec.from_resource_dir(resdir)
+                spec = KernelSpec.from_resource_dir(resdir, kernel_file=self.kernel_file)
             except JSONDecodeError:
                 log.warning("Failed to parse kernelspec in %s", resdir)
                 continue
@@ -65,6 +68,7 @@ class KernelSpecProvider(KernelProviderBase):
                 'display_name': spec.display_name,
                 'argv': spec.argv,
                 'resource_dir': spec.resource_dir,
+                'metadata': spec.metadata,
             }
 
     def launch(self, name, cwd=None):
@@ -77,6 +81,7 @@ class KernelSpecProvider(KernelProviderBase):
         spec = self.ksm.get_kernel_spec(name)
         return AsyncSubprocessKernelLauncher(
             kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd).launch()
+
 
 class IPykernelProvider(KernelProviderBase):
     """Offers a kernel type using the Python interpreter it's running in.
@@ -126,6 +131,7 @@ class IPykernelProvider(KernelProviderBase):
         return AsyncSubprocessKernelLauncher(
             kernel_cmd=info['spec']['argv'], extra_env={}, cwd=cwd).launch()
 
+
 class KernelFinder(object):
     """Manages a collection of kernel providers to find available kernel types
 
@@ -160,9 +166,9 @@ class KernelFinder(object):
         Yields 2-tuples of (prefixed_name, attributes)
         """
         for provider in self.providers:
-            for kid, attributes in provider.find_kernels():
-                id = provider.id + '/' + kid
-                yield id, attributes
+            for kernel_name, attributes in provider.find_kernels():
+                kernel_type = provider.id + '/' + kernel_name
+                yield kernel_type, attributes
 
     def launch(self, name, cwd=None):
         """Launch a kernel of a given kernel type.
@@ -182,10 +188,12 @@ class KernelFinder(object):
                 return provider.launch_async(kernel_id, cwd)
         raise KeyError(provider_id)
 
+
 def main():
     kf = KernelFinder.from_entrypoints()
     for type_id, info in kf.find_kernels():
         print(type_id)
+
 
 if __name__ == '__main__':
     main()
