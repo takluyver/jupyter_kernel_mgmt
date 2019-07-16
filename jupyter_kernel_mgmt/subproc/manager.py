@@ -12,6 +12,7 @@ import six
 import subprocess
 import sys
 import time
+import uuid
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class KernelManager(KernelManagerABC):
         self.files_to_cleanup = files_to_cleanup or []
         self.win_interrupt_evt = win_interrupt_evt
         self.log = get_app_logger()
+        self.kernel_id = str(uuid.uuid4())
 
     def wait(self, timeout):
         """"""
