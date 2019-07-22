@@ -3,6 +3,9 @@ import asyncio
 import six
 
 class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
+
+    kernel_id = None  # Subclass should set kernel_id during initialization
+
     @abstractmethod
     def is_alive(self):
         """Check whether the kernel is currently alive (e.g. the process exists)
