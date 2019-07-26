@@ -77,8 +77,9 @@ class IOLoopKernelClient(KernelClient):
 
         Also set up protocol adaptation on the first kernel_info_reply.
         """
-        if msg.header['msg_type'] == 'kernel_info_reply' \
-                and msg.content['status'] == 'ok':
+        # Since not all kernel implementations include 'status' in kernel_info_reply, assume non-existence == ok
+        if msg.header['msg_type'] == 'kernel_info_reply' and \
+                ('status' not in msg.content or msg.content['status'] == 'ok'):
             self.kernel_info_dict = msg.content
 
             if not self._protocol_adaptor_done:
