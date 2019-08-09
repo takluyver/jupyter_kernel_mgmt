@@ -3,6 +3,7 @@ import entrypoints
 import logging
 import six
 
+from traitlets.config import Application
 try:
     from json import JSONDecodeError
 except ImportError:
@@ -43,6 +44,14 @@ class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
         synchronous KernelManager2 interface, but all methods are coroutines.
         """
         raise NotImplementedError()
+
+    def load_config(self, config=None):
+        """Loads the configuration corresponding to the hosting application.  This method
+        is called during KernelFinder initialization prior to any other methods.
+        Provider is responsible for interpreting the `config` parameter (when present) which will be
+        an instance of Config: https://traitlets.readthedocs.io/en/stable/config.html#the-main-concepts
+        """
+        pass
 
 
 class KernelSpecProvider(KernelProviderBase):
@@ -139,6 +148,15 @@ class KernelFinder(object):
     """
     def __init__(self, providers):
         self.providers = providers
+
+        # If there's an application singleton, pass its configurables to the provider.  If
+        # no application, still give provider a chance to handle configuration loading.
+        config = None
+        if Application.initialized():
+            config = Application.instance().config
+
+        for provider in providers:
+            provider.load_config(config=config)
 
     @classmethod
     def from_entrypoints(cls):
