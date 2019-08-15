@@ -24,6 +24,7 @@ from .manager import KernelManager
 port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port',
               'hb_port']
 
+
 class SubprocessKernelLauncher:
     """Launch kernels in a subprocess.
 
@@ -44,13 +45,14 @@ class SubprocessKernelLauncher:
     """
     transport = 'tcp'
 
-    def __init__(self, kernel_cmd, cwd, extra_env=None, ip=None):
+    def __init__(self, kernel_cmd, cwd, extra_env=None, ip=None, launch_params=None):
         self.kernel_cmd = kernel_cmd
         self.cwd = cwd
         self.extra_env = extra_env
         if ip is None:
             ip = localhost()
         self.ip = ip
+        self.launch_params = launch_params
         self.log = get_app_logger()
 
         if self.transport == 'tcp' and not is_local_ip(ip):
@@ -138,9 +140,15 @@ class SubprocessKernelLauncher:
             # but it should be.
             cmd[0] = sys.executable
 
-        ns = dict(connection_file=connection_file,
+        # Preserve system-owned substitutions by starting with launch params
+        ns = dict()
+        if isinstance(self.launch_params, dict):
+            ns.update(self.launch_params)
+
+        # Add system-owned substitutions
+        ns.update(dict(connection_file=connection_file,
                   prefix=sys.prefix,
-                  )
+                  ))
 
         if kernel_resource_dir:
             ns["resource_dir"] = kernel_resource_dir
@@ -148,8 +156,13 @@ class SubprocessKernelLauncher:
         pat = re.compile(r'{([A-Za-z0-9_]+)}')
 
         def from_ns(match):
-            """Get the key out of ns if it's there, otherwise no change."""
-            return ns.get(match.group(1), match.group())
+            """Get the key out of ns if it's there, otherwise no change.
+               Return as string since that's what is required by pattern
+               matching.  We know this should be safe currently, because
+               only 'connection_file', 'sys.prefix' and 'resource_dir' are
+               candidates - all of which are strings.
+            """
+            return str(ns.get(match.group(1), match.group()))
 
         return [pat.sub(from_ns, arg) for arg in cmd]
 
@@ -310,12 +323,12 @@ def prepare_interrupt_event(env, interrupt_event=None):
         env["IPY_INTERRUPT_EVENT"] = env["JPY_INTERRUPT_EVENT"]
         return interrupt_event
 
-def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None):
+def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_params=None):
     """Start a new kernel, and return its Manager and a blocking client"""
     from ..client import BlockingKernelClient
     cwd = cwd or os.getcwd()
 
-    launcher = SubprocessKernelLauncher(kernel_cmd, cwd=cwd)
+    launcher = SubprocessKernelLauncher(kernel_cmd, cwd=cwd, launch_params=launch_params)
     connection_info, km = launcher.launch()
     kc = BlockingKernelClient(connection_info, manager=km)
     try:

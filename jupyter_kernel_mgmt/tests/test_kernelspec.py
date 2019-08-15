@@ -5,6 +5,7 @@
 # Distributed under the terms of the Modified BSD License.
 
 import io
+import copy
 import json
 from logging import StreamHandler
 import os
@@ -27,16 +28,17 @@ from .utils import test_env
 
 sample_kernel_json = {'argv':['cat', '{connection_file}'],
                       'display_name':'Test kernel',
+                      'metadata': {}
                      }
 
 
-def install_sample_kernel(kernels_dir, kernel_name='sample', kernel_file='kernel.json'):
+def install_sample_kernel(kernels_dir, kernel_name='sample', kernel_file='kernel.json', kernel_json=sample_kernel_json):
     """install a sample kernel in a kernels directory"""
     sample_kernel_dir = pjoin(kernels_dir, kernel_name)
     os.makedirs(sample_kernel_dir)
     json_file = pjoin(sample_kernel_dir, kernel_file)
     with open(json_file, 'w') as f:
-        json.dump(sample_kernel_json, f)
+        json.dump(kernel_json, f)
     return sample_kernel_dir
 
 

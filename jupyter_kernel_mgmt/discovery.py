@@ -25,7 +25,7 @@ class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
         pass
 
     @abstractmethod
-    def launch(self, name, cwd=None):
+    def launch(self, name, cwd=None, launch_params=None):
         """Launch a kernel, return (connection_info, kernel_manager).
 
         name will be one of the kernel names produced by find_kernels()
@@ -34,7 +34,7 @@ class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
         """
         pass
 
-    def launch_async(self, name, cwd=None):
+    def launch_async(self, name, cwd=None, launch_params=None):
         """Launch a kernel asynchronously using asyncio.
 
         name will be one of the kernel names produced by find_kernels()
@@ -80,16 +80,17 @@ class KernelSpecProvider(KernelProviderBase):
                 'metadata': spec.metadata,
             }
 
-    def launch(self, name, cwd=None):
+    def launch(self, name, cwd=None, launch_params=None):
         spec = self.ksm.get_kernel_spec(name)
-        launcher = SubprocessKernelLauncher(kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd)
+        launcher = SubprocessKernelLauncher(kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd,
+                                            launch_params=launch_params)
         return launcher.launch()
 
-    def launch_async(self, name, cwd=None):
+    def launch_async(self, name, cwd=None, launch_params=None):
         from .subproc.async_manager import AsyncSubprocessKernelLauncher
         spec = self.ksm.get_kernel_spec(name)
         return AsyncSubprocessKernelLauncher(
-            kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd).launch()
+            kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd, launch_params=launch_params).launch()
 
 
 class IPykernelProvider(KernelProviderBase):
@@ -123,22 +124,22 @@ class IPykernelProvider(KernelProviderBase):
                 'resource_dir': info['resource_dir'],
             }
 
-    def launch(self, name, cwd=None):
+    def launch(self, name, cwd=None, launch_params=None):
         info = self._check_for_kernel()
         if info is None:
             raise Exception("ipykernel is not importable")
 
         launcher = SubprocessKernelLauncher(kernel_cmd=info['spec']['argv'],
-                                            extra_env={}, cwd=cwd)
+                                            extra_env={}, cwd=cwd, launch_params=launch_params)
         return launcher.launch()
 
-    def launch_async(self, name, cwd=None):
+    def launch_async(self, name, cwd=None, launch_params=None):
         from .subproc.async_manager import AsyncSubprocessKernelLauncher
         info = self._check_for_kernel()
         if info is None:
             raise Exception("ipykernel is not importable")
         return AsyncSubprocessKernelLauncher(
-            kernel_cmd=info['spec']['argv'], extra_env={}, cwd=cwd).launch()
+            kernel_cmd=info['spec']['argv'], extra_env={}, cwd=cwd, launch_params=launch_params).launch()
 
 
 class KernelFinder(object):
@@ -188,22 +189,22 @@ class KernelFinder(object):
                 kernel_type = provider.id + '/' + kernel_name
                 yield kernel_type, attributes
 
-    def launch(self, name, cwd=None):
+    def launch(self, name, cwd=None, launch_params=None):
         """Launch a kernel of a given kernel type.
         """
         provider_id, kernel_id = name.split('/', 1)
         for provider in self.providers:
             if provider_id == provider.id:
-                return provider.launch(kernel_id, cwd)
+                return provider.launch(kernel_id, cwd=cwd, launch_params=launch_params)
         raise KeyError(provider_id)
 
-    def launch_async(self, name, cwd=None):
+    def launch_async(self, name, cwd=None, launch_params=None):
         """Launch a kernel of a given kernel type, using asyncio.
         """
         provider_id, kernel_id = name.split('/', 1)
         for provider in self.providers:
             if provider_id == provider.id:
-                return provider.launch_async(kernel_id, cwd)
+                return provider.launch_async(kernel_id, cwd=cwd, launch_params=launch_params)
         raise KeyError(provider_id)
 
 
