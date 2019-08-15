@@ -6,6 +6,10 @@ python:
 install:
   - pip install --upgrade setuptools pip
   - pip install --upgrade -e .[test] pytest-cov codecov
+  # Remove once issue is resolved, otherwise builds fail due to travis 10 min timeout
+  # Appears to be related to pyzmq PR 1313.
+  - pip install 'pyzmq<18.1'
+  - pip freeze
 script:
   - py.test --cov jupyter_kernel_mgmt jupyter_kernel_mgmt
 after_success:

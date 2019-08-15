@@ -10,6 +10,8 @@ from jupyter_kernel_mgmt.subproc.async_manager import (
     AsyncSubprocessKernelLauncher, start_new_kernel
 )
 
+TIMEOUT = 10
+
 # noinspection PyCompatibility
 class TestKernelManager(TestCase):
     def setUp(self):
@@ -38,7 +40,7 @@ class TestKernelManager(TestCase):
 
     @asyncio.coroutine
     def t_start_new_kernel(self):
-        km, kc = yield from start_new_kernel(make_ipkernel_cmd(), startup_timeout=5)
+        km, kc = yield from start_new_kernel(make_ipkernel_cmd(), startup_timeout=TIMEOUT)
         try:
             self.assertTrue((yield from km.is_alive()))
             self.assertTrue(kc.is_alive())
