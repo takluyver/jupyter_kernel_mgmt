@@ -46,6 +46,7 @@ class TestKernelManager(TestCase):
             self.assertTrue(kc.is_alive())
         finally:
             kc.shutdown_or_terminate()
+            kc.close()
 
     def test_start_new_kernel(self):
         asyncio.get_event_loop().run_until_complete(self.t_start_new_kernel())

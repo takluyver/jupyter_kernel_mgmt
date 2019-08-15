@@ -70,3 +70,4 @@ class TestKernelManager(TestCase):
             self.assertTrue(km.is_alive())
         finally:
             kc.shutdown_or_terminate()
+            kc.close()
