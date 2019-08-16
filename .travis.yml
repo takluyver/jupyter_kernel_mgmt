@@ -6,6 +6,7 @@ python:
 install:
   - pip install --upgrade setuptools pip
   - pip install --upgrade -e .[test] pytest-cov codecov
+  - pip freeze
 script:
   - py.test --cov jupyter_kernel_mgmt jupyter_kernel_mgmt
 after_success:

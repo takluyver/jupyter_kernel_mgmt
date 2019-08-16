@@ -16,7 +16,7 @@ from ipykernel.kernelspec import make_ipkernel_cmd
 from jupyter_kernel_mgmt.subproc.launcher import run_kernel,  start_new_kernel
 from .utils import test_env, skip_win32
 
-TIMEOUT = 30
+TIMEOUT = 10
 
 SIGNAL_KERNEL_CMD = [sys.executable, '-m', 'jupyter_client.tests.signalkernel',
                          '-f', '{connection_file}']
@@ -31,7 +31,7 @@ class TestKernelManager(TestCase):
 
     @skip_win32
     def test_signal_kernel_subprocesses(self):
-        with run_kernel(SIGNAL_KERNEL_CMD, startup_timeout=5) as kc:
+        with run_kernel(SIGNAL_KERNEL_CMD, startup_timeout=TIMEOUT) as kc:
             def execute(cmd):
                 reply = kc.execute(cmd)
                 content = reply.content
@@ -65,8 +65,9 @@ class TestKernelManager(TestCase):
                              [-signal.SIGINT] * N)
 
     def test_start_new_kernel(self):
-        km, kc = start_new_kernel(make_ipkernel_cmd(), startup_timeout=5)
+        km, kc = start_new_kernel(make_ipkernel_cmd(), startup_timeout=TIMEOUT)
         try:
             self.assertTrue(km.is_alive())
         finally:
             kc.shutdown_or_terminate()
+            kc.close()
