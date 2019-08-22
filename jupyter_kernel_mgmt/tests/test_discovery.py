@@ -1,3 +1,10 @@
+"""Tests for Kernel Management Discovery"""
+
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
+import logging
+import pytest
 import sys
 import unittest
 
@@ -6,9 +13,9 @@ from jupyter_kernel_mgmt import discovery, kernelspec
 from jupyter_kernel_mgmt.managerabc import KernelManagerABC
 from jupyter_kernel_mgmt.subproc.manager import KernelManager
 from jupyter_core import paths
+from .utils import test_env, run_sync
 from traitlets import List, Unicode
 from traitlets.config import Application, SingletonConfigurable
-from .utils import test_env
 from .test_kernelspec import install_sample_kernel
 
 
@@ -19,11 +26,8 @@ class DummyKernelProvider(discovery.KernelProviderBase):
     def find_kernels(self):
         yield 'sample', {'argv': ['dummy_kernel']}
 
-    def launch(self, name, cwd=None, launch_params=None):
+    async def launch(self, name, cwd=None, launch_params=None):
         return {}, DummyKernelManager()
-
-    def launch_async(self, name, cwd=None, launch_params=None):
-        pass
 
 
 class DummyKernelSpecProvider(discovery.KernelSpecProvider):
@@ -33,7 +37,7 @@ class DummyKernelSpecProvider(discovery.KernelSpecProvider):
 
     # find_kernels() is inherited from KernelsSpecProvider
 
-    def launch(self, name, cwd=None, launch_params=None):
+    async def launch(self, name, cwd=None, launch_params=None):
         return {}, DummyKernelManager()
 
 
@@ -48,24 +52,24 @@ class LaunchParamsKernelProvider(discovery.KernelSpecProvider):
 class DummyKernelManager(KernelManagerABC):
     _alive = True
 
-    def is_alive(self):
+    async def is_alive(self):
         """Check whether the kernel is currently alive (e.g. the process exists)
         """
         return self._alive
 
-    def wait(self, timeout):
+    async def wait(self, timeout):
         """Wait for the kernel process to exit.
         """
         return False
 
-    def signal(self, signum):
+    async def signal(self, signum):
         """Send a signal to the kernel."""
         pass
 
-    def interrupt(self):
+    async def interrupt(self):
         pass
 
-    def kill(self):
+    async def kill(self):
         self._alive = False
 
 
@@ -99,6 +103,10 @@ class TestConfigKernelProvider(DummyKernelProvider):
 
 
 class KernelDiscoveryTests(unittest.TestCase):
+
+    @pytest.fixture(autouse=True)
+    def inject_fixtures(self, caplog):
+        self._caplog = caplog
 
     def setUp(self):
         self.env_patch = test_env()
@@ -156,7 +164,7 @@ class KernelDiscoveryTests(unittest.TestCase):
         assert list(kf.find_kernels()) == \
             [('dummy/sample', {'argv': ['dummy_kernel']})]
 
-        conn_info, manager = kf.launch('dummy/sample')
+        conn_info, manager = run_sync(kf.launch('dummy/sample'))
         assert isinstance(manager, DummyKernelManager)
 
     def test_kernel_spec_provider(self):
@@ -175,9 +183,9 @@ class KernelDiscoveryTests(unittest.TestCase):
         assert found_argv == ['cat', '{connection_file}']
 
         with self.assertRaises(kernelspec.NoSuchKernel):
-            kf.launch('spec/dummy_kspec1')
+            run_sync(kf.launch('spec/dummy_kspec1'))
 
-        conn_info, manager = kf.launch('spec/sample')
+        conn_info, manager = run_sync(kf.launch('spec/sample'))
         assert isinstance(manager, KernelManager)
         # this actually starts a kernel, so let's make sure its terminated
         manager.kill()
@@ -193,12 +201,11 @@ class KernelDiscoveryTests(unittest.TestCase):
             assert name.startswith('dummy_kspec/dummy_kspec')
             assert spec['argv'] == ['cat', '{connection_file}']
 
-        conn_info, manager = kf.launch('dummy_kspec/dummy_kspec1')
+        conn_info, manager = run_sync(kf.launch('dummy_kspec/dummy_kspec1'))
         assert isinstance(manager, DummyKernelManager)
-        manager.kill()  # no process was started, so this is only for completeness
+        yield manager.kill()  # no process was started, so this is only for completeness
 
-    @staticmethod
-    def test_kernel_launch_params():
+    def test_kernel_launch_params(self):
         kf = discovery.KernelFinder(providers=[LaunchParamsKernelProvider()])
 
         kspecs = list(kf.find_kernels())
@@ -237,18 +244,17 @@ class KernelDiscoveryTests(unittest.TestCase):
         # add a "system-owned" parameter - connection_file - ensure this value is NOT substituted.
         launch_params['connection_file'] = 'bad_param'
 
-        conn_info, manager = kf.launch('params_kspec/params_kspec', launch_params=launch_params)
-        assert isinstance(manager, KernelManager)
+        # capture DEBUG output in order to confirm argv substitutions
+        with self._caplog.at_level(logging.DEBUG):
+            conn_info, manager = run_sync(kf.launch('params_kspec/params_kspec', launch_params=launch_params))
+            assert isinstance(manager, KernelManager)
+            assert "Starting kernel cmd: ['tail', '-f', '-n 8'," in self._caplog.text
 
-        # confirm argv substitutions
-        assert manager.kernel.args[1] == '-f'
-        assert manager.kernel.args[2] == '-n 8'
-        assert manager.kernel.args[3] != 'bad_param'
+            # this actually starts a tail -f command, so let's make sure its terminated
+            manager.kill()
 
-        # this actually starts a tail -f command, so let's make sure its terminated
-        manager.kill()
-
-    def test_load_config(self):
+    @staticmethod
+    def test_load_config():
         # create fake application
         app = ProviderApplication()
         app.launch_instance(argv=["--ProviderConfig.my_argv=['xxx','yyy']"])

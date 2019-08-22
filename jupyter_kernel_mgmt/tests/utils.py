@@ -1,6 +1,7 @@
 """Testing utils for jupyter_client tests
 
 """
+import asyncio
 import os
 pjoin = os.path.join
 import sys
@@ -61,3 +62,7 @@ def execute(code='', kc=None, **kwargs):
         assert execute_input['content']['code'] == code
 
     return msg_id, reply['content']
+
+
+def run_sync(coro_method):
+    return asyncio.get_event_loop().run_until_complete(coro_method)

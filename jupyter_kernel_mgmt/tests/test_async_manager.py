@@ -21,10 +21,9 @@ class TestKernelManager(TestCase):
     def tearDown(self):
         self.env_patch.stop()
 
-    @asyncio.coroutine
-    def t_get_connect_info(self):
+    async def t_get_connect_info(self):
         launcher = AsyncSubprocessKernelLauncher(make_ipkernel_cmd(), os.getcwd())
-        info, km = yield from launcher.launch()
+        info, km = await launcher.launch()
         try:
             self.assertEqual(set(info.keys()), {
                 'ip', 'transport',
@@ -32,17 +31,16 @@ class TestKernelManager(TestCase):
                 'key', 'signature_scheme',
             })
         finally:
-            yield from km.kill()
-            yield from km.cleanup()
+            await km.kill()
+            await km.cleanup()
 
     def test_get_connect_info(self):
         asyncio.get_event_loop().run_until_complete(self.t_get_connect_info())
 
-    @asyncio.coroutine
-    def t_start_new_kernel(self):
-        km, kc = yield from start_new_kernel(make_ipkernel_cmd(), startup_timeout=TIMEOUT)
+    async def t_start_new_kernel(self):
+        km, kc = await start_new_kernel(make_ipkernel_cmd(), startup_timeout=TIMEOUT)
         try:
-            self.assertTrue((yield from km.is_alive()))
+            self.assertTrue((await km.is_alive()))
             self.assertTrue(kc.is_alive())
         finally:
             kc.shutdown_or_terminate()
