@@ -6,6 +6,8 @@ from jupyter_kernel_mgmt import discovery, kernelspec
 from jupyter_kernel_mgmt.managerabc import KernelManagerABC
 from jupyter_kernel_mgmt.subproc.manager import KernelManager
 from jupyter_core import paths
+from traitlets import List, Unicode
+from traitlets.config import Application, SingletonConfigurable
 from .utils import test_env
 from .test_kernelspec import install_sample_kernel
 
@@ -61,6 +63,35 @@ class DummyKernelManager(KernelManagerABC):
     def get_connection_info(self):
         """Return a dictionary of connection information"""
         return {}
+
+
+class ProviderApplication(Application):
+    name = 'ProviderApplication'
+    my_app = Unicode('my_app', config=True,)
+
+
+class ProviderConfig(SingletonConfigurable):
+    my_argv = List(Unicode(), ['default_argv'], config=True,)
+    my_foo = Unicode('foo.bar', config=True,)
+
+
+class TestConfigKernelProvider(DummyKernelProvider):
+    """A dummy kernel provider for testing KernelFinder with configuration loading"""
+    id = 'config'
+
+    config = None
+    argv = ['dummy_config_kernel']  # will be replace by config item
+
+    def find_kernels(self):
+        argv = self.argv
+        if self.config:
+            argv = self.config.my_argv
+            assert self.config.my_foo == 'foo.bar'  # verify default config value
+
+        yield 'sample', {'argv': argv}
+
+    def load_config(self, config=None):
+        self.config = ProviderConfig.instance(config=config)
 
 
 class KernelDiscoveryTests(unittest.TestCase):
@@ -134,3 +165,21 @@ class KernelDiscoveryTests(unittest.TestCase):
 
         conn_info, manager = kf.launch('dummy_kspec/dummy_kspec1')
         assert isinstance(manager, DummyKernelManager)
+
+    def test_load_config(self):
+        # create fake application
+        app = ProviderApplication()
+        app.launch_instance(argv=["--ProviderConfig.my_argv=['xxx','yyy']"])
+
+        kf = discovery.KernelFinder(providers=[TestConfigKernelProvider()])
+        dummy_kspecs = list(kf.find_kernels())
+
+        count = 0
+        found_argv = []
+        for name, spec in dummy_kspecs:
+            if name == 'config/sample':
+                found_argv = spec['argv']
+                count += 1
+
+        assert count == 1
+        assert found_argv == ['xxx', 'yyy']
