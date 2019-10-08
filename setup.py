@@ -15,8 +15,8 @@ from setuptools import setup
 from setuptools.command.bdist_egg import bdist_egg
 
 v = sys.version_info
-if v[:2] < (3, 4):
-    error = "ERROR: %s requires Python version 3.4 or above." % name
+if v[:2] < (3, 5):
+    error = "ERROR: %s requires Python version 3.5 or above." % name
     print(error, file=sys.stderr)
     sys.exit(1)
 
@@ -73,7 +73,7 @@ setup_args = dict(
     extras_require   = {
         'test': ['ipykernel', 'ipython', 'mock', 'pytest'],
     },
-    python_requires = ">=3.4",
+    python_requires = ">=3.5",
     cmdclass         = {
         'bdist_egg': bdist_egg if 'bdist_egg' in sys.argv else bdist_egg_disabled,
     },

@@ -3,15 +3,13 @@
 
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
-
-from tornado import ioloop
+from tornado import ioloop, gen
 from traitlets.config.configurable import LoggingConfigurable
 from traitlets import (
     Float,  Bool, Integer,
 )
 
 from .discovery import KernelFinder
-
 
 class KernelRestarterBase(LoggingConfigurable):
     """Monitor and autorestart a kernel."""
@@ -81,7 +79,7 @@ class KernelRestarterBase(LoggingConfigurable):
             except Exception as e:
                 self.log.error("KernelRestarter: %s callback %r failed", event, callback, exc_info=True)
 
-    def do_restart(self, auto=False):
+    async def do_restart(self, auto=False):
         """Called when the kernel has died"""
         if auto and self._restarting:
             self._restart_count += 1
@@ -101,8 +99,7 @@ class KernelRestarterBase(LoggingConfigurable):
             self.log.info("KernelRestarter: starting new manager (%i/%i)",
                           self._restart_count, self.restart_limit)
             self.kernel_manager.cleanup()
-            conn_info, mgr = self.kernel_finder.launch(
-                self.kernel_type, cwd)
+            conn_info, mgr = await self.kernel_finder.launch(self.kernel_type, cwd)
             self._fire_callbacks('restarted', {
                 'auto': auto,
                 'connection_info': conn_info,
@@ -111,13 +108,12 @@ class KernelRestarterBase(LoggingConfigurable):
             self.kernel_manager = mgr
             self._restarting = True
 
-
-    def poll(self):
+    async def poll(self):
         if self.debug:
             self.log.debug('Polling kernel...')
-        if not self.kernel_manager.is_alive():
+        if not await self.kernel_manager.is_alive():
             self._fire_callbacks('died', {})
-            self.do_restart(auto=True)
+            await self.do_restart(auto=True)
         else:
             if self._restarting:
                 self.log.debug("KernelRestarter: restart apparently succeeded")
