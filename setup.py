@@ -63,7 +63,7 @@ setup_args = dict(
     install_requires = [
         'tornado>=5',
         'traitlets>=4.2.1',
-        'jupyter_core>=4.4.0',
+        'jupyter_core>=4.6.0',
         'jupyter_protocol',
         'six',
         'pyzmq>=17',
@@ -71,7 +71,7 @@ setup_args = dict(
         'entrypoints',
     ],
     extras_require   = {
-        'test': ['ipykernel', 'ipython', 'mock', 'pytest'],
+        'test': ['ipykernel', 'ipython', 'pytest', 'pytest-asyncio'],
     },
     python_requires = ">=3.5",
     cmdclass         = {

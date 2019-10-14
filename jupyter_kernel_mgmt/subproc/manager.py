@@ -5,13 +5,13 @@
 
 from __future__ import absolute_import
 
+import asyncio
 import logging
 import os
 import signal
 import six
 import subprocess
 import sys
-import time
 import uuid
 
 log = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 from traitlets.log import get_logger as get_app_logger
 
 from ..managerabc import KernelManagerABC
+from ..util import maybe_future
 
 
 class KernelManager(KernelManagerABC):
@@ -42,16 +43,16 @@ class KernelManager(KernelManagerABC):
         self.log = get_app_logger()
         self.kernel_id = str(uuid.uuid4())
 
-    def wait(self, timeout):
+    async def wait(self, timeout):
         """"""
         if timeout is None:
             # Wait indefinitely
-            self.kernel.wait()
+            await maybe_future(self.kernel.wait())
             return False
 
         if six.PY3:
             try:
-                self.kernel.wait(timeout)
+                await maybe_future(self.kernel.wait(timeout))
                 return False
             except subprocess.TimeoutExpired:
                 return True
@@ -59,27 +60,27 @@ class KernelManager(KernelManagerABC):
             pollinterval = 0.1
             for i in range(int(timeout / pollinterval)):
                 if self.is_alive():
-                    time.sleep(pollinterval)
+                    await asyncio.sleep(pollinterval)
                 else:
                     return False
-            return self.is_alive()
+            return await self.is_alive()
 
-    def cleanup(self):
+    async def cleanup(self):
         """Clean up resources when the kernel is shut down"""
         # cleanup connection files on full shutdown of kernel we started
         for f in self.files_to_cleanup:
             try:
-                os.remove(f)
+                await maybe_future(os.remove(f))
             except (IOError, OSError, AttributeError):
                 pass
 
-    def kill(self):
+    async def kill(self):
         """Kill the running kernel.
         """
         # Signal the kernel to terminate (sends SIGKILL on Unix and calls
         # TerminateProcess() on Win32).
         try:
-            self.kernel.kill()
+            await maybe_future(self.kernel.kill())
         except OSError as e:
             # In Windows, we will get an Access Denied error if the process
             # has already terminated. Ignore it.
@@ -94,9 +95,9 @@ class KernelManager(KernelManagerABC):
                     raise
 
         # Block until the kernel terminates.
-        self.kernel.wait()
+        await maybe_future(self.kernel.wait())
 
-    def interrupt(self):
+    async def interrupt(self):
         """Interrupts the kernel by sending it a signal.
 
         Unlike ``signal_kernel``, this operation is well supported on all
@@ -110,9 +111,9 @@ class KernelManager(KernelManagerABC):
             from .win_interrupt import send_interrupt
             send_interrupt(self.win_interrupt_evt)
         else:
-            self.signal(signal.SIGINT)
+            await self.signal(signal.SIGINT)
 
-    def signal(self, signum):
+    async def signal(self, signum):
         """Sends a signal to the process group of the kernel (this
         usually includes the kernel and any subprocesses spawned by
         the kernel).
@@ -123,13 +124,14 @@ class KernelManager(KernelManagerABC):
         if hasattr(os, "getpgid") and hasattr(os, "killpg"):
             try:
                 pgid = os.getpgid(self.kernel.pid)
-                os.killpg(pgid, signum)
+                await maybe_future(os.killpg(pgid, signum))
                 return
             except OSError:
                 pass
-        self.kernel.send_signal(signum)
+        await maybe_future(self.kernel.send_signal(signum))
 
-    def is_alive(self):
+    async def is_alive(self):
         """Is the kernel process still running?"""
-        return self.kernel.poll() is None
+        poll_result = await maybe_future(self.kernel.poll())
+        return poll_result is None
 

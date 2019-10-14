@@ -97,7 +97,7 @@ class KernelRestarterBase(LoggingConfigurable):
             cwd = getattr(self.kernel_manager, 'cwd', None)  # :-/
             self.log.info("KernelRestarter: starting new manager (%i/%i)",
                           self._restart_count, self.restart_limit)
-            self.kernel_manager.cleanup()
+            await self.kernel_manager.cleanup()
             conn_info, mgr = await self.kernel_finder.launch(self.kernel_type, cwd)
             self._fire_callbacks('restarted', {
                 'auto': auto,
