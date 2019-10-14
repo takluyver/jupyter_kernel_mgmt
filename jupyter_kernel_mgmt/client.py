@@ -285,8 +285,8 @@ class IOLoopKernelClient(KernelClient):
             yield gen.with_timeout(timedelta(seconds=timeout), self.shutdown())
         except tornado.util.TimeoutError:
             self.log.debug("Kernel is taking too long to finish, killing")
-            self.manager.kill()
-        self.manager.cleanup()
+            yield self.manager.kill()
+        yield self.manager.cleanup()
 
     @gen.coroutine
     def wait_for_ready(self):
@@ -303,7 +303,8 @@ class IOLoopKernelClient(KernelClient):
                 else:
                     break
 
-                if not self.is_alive():
+                is_alive = yield self.is_alive()
+                if not is_alive:
                     raise RuntimeError(
                         'Kernel died before replying to kernel_info')
 
@@ -320,14 +321,14 @@ class IOLoopKernelClient(KernelClient):
         msg_id = super().is_complete(code, _header=_header)
         return self._request_future(msg_id)
 
-    def interrupt(self, _header=None):
+    async def interrupt(self, _header=None):
         """Send an interrupt message/signal to the kernel"""
         mode = self.connection_info.get('interrupt_mode', 'signal')
         if mode == 'message':
-            msg_id = super().interrupt(_header=_header)
+            msg_id = await super().interrupt(_header=_header)
             return self._request_future(msg_id)
         elif self.owned_kernel:
-            self.manager.interrupt()
+            await self.manager.interrupt()
         else:
             self.log.warning("Can't send signal to non-owned kernel")
             f = Future()

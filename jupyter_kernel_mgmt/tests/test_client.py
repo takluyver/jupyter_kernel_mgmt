@@ -5,65 +5,69 @@
 
 
 import os
-
+import pytest
 pjoin = os.path.join
-from unittest import TestCase
 
 from ipykernel.kernelspec import make_ipkernel_cmd
 from jupyter_protocol.messages import Message
 from ..subproc.launcher import start_new_kernel
-from .utils import test_env
+from .utils import setup_env, run_sync
 
 from IPython.utils.capture import capture_output
 
 TIMEOUT = 30
 
+# pytestmark = pytest.mark.asyncio
+#
+@pytest.fixture
+def setup_test(setup_env):
+    pytest.km, pytest.kc = start_new_kernel(kernel_cmd=make_ipkernel_cmd())
+    yield pytest.km, pytest.kc
+    pytest.kc.shutdown_or_terminate()
+    pytest.kc.close()
+    run_sync(pytest.km.kill())
 
-class TestKernelClient(TestCase):
-    def setUp(self):
-        self.env_patch = test_env()
-        self.env_patch.start()
-        self.addCleanup(self.env_patch.stop)
 
-        self.km, self.kc = start_new_kernel(kernel_cmd=make_ipkernel_cmd())
-        self.addCleanup(self.kc.close)
-        self.addCleanup(self.kc.shutdown_or_terminate)
+def _check_reply(reply_type, reply):
+    assert isinstance(reply, Message)
+    assert reply.header['msg_type'] == reply_type + '_reply'
+    assert reply.parent_header['msg_type'] == reply_type + '_request'
 
-    def test_execute_interactive(self):
-        kc = self.kc
 
-        with capture_output() as io:
-            reply = kc.execute_interactive("print('hello')", timeout=TIMEOUT,
-                                           raise_on_no_idle=True)
-        assert 'hello' in io.stdout
-        assert reply.content['status'] == 'ok'
+def test_execute_interactive(setup_test):
+    kc = pytest.kc
 
-    def _check_reply(self, reply_type, reply):
-        self.assertIsInstance(reply, Message)
-        self.assertEqual(reply.header['msg_type'], reply_type + '_reply')
-        self.assertEqual(reply.parent_header['msg_type'],
-                         reply_type + '_request')
+    with capture_output() as io:
+        reply = kc.execute_interactive("print('hello')", timeout=TIMEOUT)
+    assert 'hello' in io.stdout
+    assert reply.content['status'] == 'ok'
 
-    def test_history(self):
-        reply = self.kc.history(session=0, reply=True, timeout=TIMEOUT)
-        self._check_reply('history', reply)
 
-    def test_inspect(self):
-        reply = self.kc.inspect('code', reply=True, timeout=TIMEOUT)
-        self._check_reply('inspect', reply)
+def test_history(setup_test):
+    reply = pytest.kc.history(session=0)
+    _check_reply('history', reply)
 
-    def test_complete(self):
-        reply = self.kc.complete('code', reply=True, timeout=TIMEOUT)
-        self._check_reply('complete', reply)
 
-    def test_kernel_info(self):
-        reply = self.kc.kernel_info(reply=True, timeout=TIMEOUT)
-        self._check_reply('kernel_info', reply)
+def test_inspect(setup_test):
+    reply = pytest.kc.inspect('code')
+    _check_reply('inspect', reply)
 
-    def test_comm_info(self):
-        reply = self.kc.comm_info(reply=True, timeout=TIMEOUT)
-        self._check_reply('comm_info', reply)
 
-    def test_shutdown(self):
-        reply = self.kc.shutdown(reply=True, timeout=TIMEOUT)
-        self._check_reply('shutdown', reply)
+def test_complete(setup_test):
+    reply = pytest.kc.complete('code')
+    _check_reply('complete', reply)
+
+
+def test_kernel_info(setup_test):
+    reply = pytest.kc.kernel_info()
+    _check_reply('kernel_info', reply)
+
+
+def test_comm_info(setup_test):
+    reply = pytest.kc.comm_info()
+    _check_reply('comm_info', reply)
+
+
+def test_shutdown(setup_test):
+    reply = pytest.kc.shutdown()
+    _check_reply('shutdown', reply)

@@ -11,14 +11,14 @@ class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
     kernel_id = None  # Subclass should set kernel_id during initialization
 
     @abstractmethod
-    def is_alive(self):
+    async def is_alive(self):
         """
         Check whether the kernel is currently alive (e.g. the process exists)
         """
         pass
 
     @abstractmethod
-    def wait(self, timeout):
+    async def wait(self, timeout):
         """
         Wait for the kernel process to exit.
 
@@ -31,14 +31,13 @@ class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
         pass
 
     @abstractmethod
-    def signal(self, signum):
+    async def signal(self, signum):
         """
-        Send a signal to the kernel.
-        """
+        Send a signal to the kernel."""
         pass
 
     @abstractmethod
-    def interrupt(self):
+    async def interrupt(self):
         """
         Interrupt the kernel by sending it a signal or similar event
 
@@ -50,7 +49,7 @@ class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
         pass
 
     @abstractmethod
-    def kill(self):
+    async def kill(self):
         """
         Forcibly terminate the kernel.
 
@@ -60,46 +59,8 @@ class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
         """
         pass
 
-    def cleanup(self):
+    async def cleanup(self):
         """
         Clean up any resources, such as files created by the manager.
         """
         pass
-
-
-# noinspection PyCompatibility
-class AsyncManagerWrapper(KernelManagerABC):
-    """Wrap a blocking KernelLauncher to be used asynchronously.
-
-    This calls the blocking methods in the event loop's default executor.
-    """
-    def __init__(self, wrapped, loop=None):
-        self.wrapped = wrapped
-        self.loop = loop or asyncio.get_event_loop()
-
-    def _exec(self, f, *args):
-        return self.loop.run_in_executor(None, f, *args)
-
-    @asyncio.coroutine
-    def is_alive(self):
-        return (yield from self._exec(self.wrapped.is_alive))
-
-    @asyncio.coroutine
-    def wait(self, timeout):
-        return (yield from self._exec(self.wrapped.wait, timeout))
-
-    @asyncio.coroutine
-    def signal(self, signum):
-        return (yield from self._exec(self.wrapped.signal, signum))
-
-    @asyncio.coroutine
-    def interrupt(self):
-        return (yield from self._exec(self.wrapped.interrupt))
-
-    @asyncio.coroutine
-    def kill(self):
-        return (yield from self._exec(self.wrapped.kill))
-
-    @asyncio.coroutine
-    def cleanup(self):
-        return (yield from self._exec(self.wrapped.cleanup))

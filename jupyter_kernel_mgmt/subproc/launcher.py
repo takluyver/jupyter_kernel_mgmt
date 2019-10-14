@@ -16,7 +16,7 @@ import warnings
 
 from ipython_genutils.encoding import getdefaultencoding
 from ipython_genutils.py3compat import cast_bytes_py2
-from jupyter_core.paths import jupyter_runtime_dir
+from jupyter_core.paths import jupyter_runtime_dir, secure_write
 from jupyter_core.utils import ensure_dir_exists
 from ..localinterfaces import localhost, is_local_ip, local_ips
 from .manager import KernelManager
@@ -73,7 +73,7 @@ class SubprocessKernelLauncher:
         win_interrupt_evt = prepare_interrupt_event(kw['env'])
 
         # launch the kernel subprocess
-        self.log.debug("Starting kernel: %s", kw['args'])
+        self.log.debug("Starting kernel cmd: %s", kw['args'])
         kernel = Popen(**kw)
         kernel.stdin.close()
 
@@ -119,7 +119,10 @@ class SubprocessKernelLauncher:
         cfg['transport'] = self.transport
         cfg['signature_scheme'] = 'hmac-sha256'
 
-        with open(fname, 'w') as f:
+        # Only ever write this file as user read/writeable
+        # This would otherwise introduce a vulnerability as a file has secrets
+        # which would let others execute arbitrarily code as you
+        with secure_write(fname) as f:
             f.write(json.dumps(cfg, indent=2))
 
         set_sticky_bit(fname)
@@ -280,6 +283,7 @@ def new_key():
         buf[:4], buf[4:]
     ))
 
+
 def set_sticky_bit(fname):
     """Set the sticky bit on the file and its parent directory.
 
@@ -324,6 +328,7 @@ def prepare_interrupt_event(env, interrupt_event=None):
         env["IPY_INTERRUPT_EVENT"] = env["JPY_INTERRUPT_EVENT"]
         return interrupt_event
 
+
 def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_params=None):
     """Start a new kernel, and return its Manager and a blocking client"""
     from ..client import BlockingKernelClient
@@ -340,6 +345,7 @@ def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_params=Non
         raise
 
     return km, kc
+
 
 @contextmanager
 def run_kernel(kernel_cmd, **kwargs):

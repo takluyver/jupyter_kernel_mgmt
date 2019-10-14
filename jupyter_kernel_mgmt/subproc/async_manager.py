@@ -1,6 +1,5 @@
 import asyncio
 import os
-
 from .launcher import SubprocessKernelLauncher, prepare_interrupt_event
 from .manager import KernelManager
 from ..util import inherit_docstring
@@ -88,19 +87,18 @@ class AsyncPopenKernelManager(KernelManager):
     def cleanup(self):
         return super().cleanup()
 
-@asyncio.coroutine
-def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None):
+async def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None):
     """Start a new kernel, and return its Manager and a blocking client"""
     from ..client import IOLoopKernelClient
     cwd = cwd or os.getcwd()
 
     launcher = AsyncSubprocessKernelLauncher(kernel_cmd, cwd=cwd)
-    info, km = yield from launcher.launch()
+    info, km = await launcher.launch()
     kc = IOLoopKernelClient(info, manager=km)
     try:
-        yield from asyncio.wait_for(kc.wait_for_ready(), timeout=startup_timeout)
+        await asyncio.wait_for(kc.wait_for_ready(), timeout=startup_timeout)
     except RuntimeError:
-        yield from kc.shutdown_or_terminate()
+        await kc.shutdown_or_terminate()
         raise
 
     return km, kc

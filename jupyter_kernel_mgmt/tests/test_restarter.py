@@ -1,11 +1,18 @@
-import asyncio
-from .test_discovery import DummyKernelManager, DummyKernelProvider
+"""Tests for Kernel Restarts"""
+
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
+import pytest
+
+from .test_discovery import DummyKernelProvider
 
 from jupyter_kernel_mgmt import discovery
 from jupyter_kernel_mgmt.restarter import KernelRestarterBase
 
 
-async def t_reinstantiate():
+@pytest.mark.asyncio
+async def test_reinstantiate():
     # If the kernel fails, a new manager should be instantiated
     kf = discovery.KernelFinder(providers=[DummyKernelProvider()])
     _, manager = await kf.launch('dummy/sample')
@@ -17,6 +24,3 @@ async def t_reinstantiate():
     assert restarter.kernel_manager is not manager
     assert await restarter.kernel_manager.is_alive()
 
-
-def test_reinstantiate():
-    asyncio.get_event_loop().run_until_complete(t_reinstantiate())

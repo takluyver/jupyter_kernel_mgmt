@@ -11,8 +11,8 @@ from logging import StreamHandler
 import os
 from os.path import join as pjoin
 from subprocess import Popen, PIPE, STDOUT
+import shutil
 import sys
-import unittest
 
 import pytest
 
@@ -24,177 +24,168 @@ else:
 from ipython_genutils.tempdir import TemporaryDirectory
 from jupyter_kernel_mgmt import kernelspec
 from jupyter_core import paths
-from .utils import test_env
-
-sample_kernel_json = {'argv':['cat', '{connection_file}'],
-                      'display_name':'Test kernel',
-                      'metadata': {}
-                     }
+from .utils import install_sample_kernel, setup_env, sample_kernel_json
 
 
-def install_sample_kernel(kernels_dir, kernel_name='sample', kernel_file='kernel.json', kernel_json=sample_kernel_json):
-    """install a sample kernel in a kernels directory"""
-    sample_kernel_dir = pjoin(kernels_dir, kernel_name)
-    os.makedirs(sample_kernel_dir)
-    json_file = pjoin(sample_kernel_dir, kernel_file)
-    with open(json_file, 'w') as f:
-        json.dump(kernel_json, f)
-    return sample_kernel_dir
+@pytest.fixture
+def setup_test(setup_env):
+    pytest.sample_kernel_dir = install_sample_kernel(
+        pjoin(paths.jupyter_data_dir(), 'kernels'))
+    pytest.prov_sample1_kernel_dir = install_sample_kernel(
+        pjoin(paths.jupyter_data_dir(), 'kernels'), 'prov_sample1', 'prov_kernel.json')
+    pytest.prov_sample2_kernel_dir = install_sample_kernel(
+        pjoin(paths.jupyter_data_dir(), 'kernels'), 'prov_sample2', 'prov_kernel.json')
+
+    pytest.ksm = kernelspec.KernelSpecManager()
+    pytest.prov_ksm = kernelspec.KernelSpecManager(kernel_file='prov_kernel.json')
+
+    td2 = TemporaryDirectory()
+    pytest.installable_kernel = td2.name
+    with open(pjoin(pytest.installable_kernel, 'kernel.json'), 'w') as f:
+        json.dump(sample_kernel_json, f)
+
+    yield pytest.installable_kernel
+    shutil.rmtree(pytest.installable_kernel)
 
 
-class KernelSpecTests(unittest.TestCase):
+def test_find_kernel_specs(setup_test):
+    kernels = pytest.ksm.find_kernel_specs()
+    assert kernels['sample'] == pytest.sample_kernel_dir
+    assert 'prov_sample1' not in kernels
+    assert 'prov_sample2' not in kernels
 
-    def setUp(self):
-        self.env_patch = test_env()
-        self.env_patch.start()
-        self.sample_kernel_dir = install_sample_kernel(
-            pjoin(paths.jupyter_data_dir(), 'kernels'))
-        self.prov_sample1_kernel_dir = install_sample_kernel(
-            pjoin(paths.jupyter_data_dir(), 'kernels'), 'prov_sample1', 'prov_kernel.json')
-        self.prov_sample2_kernel_dir = install_sample_kernel(
-            pjoin(paths.jupyter_data_dir(), 'kernels'), 'prov_sample2', 'prov_kernel.json')
 
-        self.ksm = kernelspec.KernelSpecManager()
-        self.prov_ksm = kernelspec.KernelSpecManager(kernel_file='prov_kernel.json')
+def test_get_kernel_spec(setup_test):
+    ks = pytest.ksm.get_kernel_spec('SAMPLE')  # Case insensitive
+    assert ks.resource_dir == pytest.sample_kernel_dir
+    assert ks.argv == sample_kernel_json['argv']
+    assert ks.display_name == sample_kernel_json['display_name']
+    assert ks.env == {}
+    assert ks.metadata == {}
+    with pytest.raises(kernelspec.NoSuchKernel):
+        pytest.ksm.get_kernel_spec('prov1_sample')
 
-        td2 = TemporaryDirectory()
-        self.addCleanup(td2.cleanup)
-        self.installable_kernel = td2.name
-        with open(pjoin(self.installable_kernel, 'kernel.json'), 'w') as f:
-            json.dump(sample_kernel_json, f)
 
-    def tearDown(self):
-        self.env_patch.stop()
+def test_find_all_specs(setup_test):
+    kernels = pytest.ksm.get_all_specs()
+    assert kernels['sample']['resource_dir'] == pytest.sample_kernel_dir
+    assert kernels['sample']['spec'] is not None
 
-    def test_find_kernel_specs(self):
-        kernels = self.ksm.find_kernel_specs()
-        self.assertEqual(kernels['sample'], self.sample_kernel_dir)
-        self.assertNotIn('prov_sample1', kernels)
-        self.assertNotIn('prov_sample2', kernels)
 
-    def test_get_kernel_spec(self):
-        ks = self.ksm.get_kernel_spec('SAMPLE')  # Case insensitive
-        self.assertEqual(ks.resource_dir, self.sample_kernel_dir)
-        self.assertEqual(ks.argv, sample_kernel_json['argv'])
-        self.assertEqual(ks.display_name, sample_kernel_json['display_name'])
-        self.assertEqual(ks.env, {})
-        self.assertEqual(ks.metadata, {})
-        with self.assertRaises(kernelspec.NoSuchKernel):
-            self.ksm.get_kernel_spec('prov1_sample')
+def test_kernel_spec_priority(tmpdir, setup_test):
+    sample_kernel = install_sample_kernel(tmpdir.dirname)
+    pytest.ksm.kernel_dirs.append(tmpdir.dirname)
+    kernels = pytest.ksm.find_kernel_specs()
+    assert kernels['sample'] == pytest.sample_kernel_dir
+    pytest.ksm.kernel_dirs.insert(0, tmpdir.dirname)
+    kernels = pytest.ksm.find_kernel_specs()
+    assert kernels['sample'] == sample_kernel
 
-    def test_find_all_specs(self):
-        kernels = self.ksm.get_all_specs()
-        self.assertEqual(kernels['sample']['resource_dir'], self.sample_kernel_dir)
-        self.assertIsNotNone(kernels['sample']['spec'])
-    
-    def test_kernel_spec_priority(self):
-        td = TemporaryDirectory()
-        self.addCleanup(td.cleanup)
-        sample_kernel = install_sample_kernel(td.name)
-        self.ksm.kernel_dirs.append(td.name)
-        kernels = self.ksm.find_kernel_specs()
-        self.assertEqual(kernels['sample'], self.sample_kernel_dir)
-        self.ksm.kernel_dirs.insert(0, td.name)
-        kernels = self.ksm.find_kernel_specs()
-        self.assertEqual(kernels['sample'], sample_kernel)
 
-    def test_install_kernel_spec(self):
-        self.ksm.install_kernel_spec(self.installable_kernel,
+def test_install_kernel_spec(setup_test):
+    pytest.ksm.install_kernel_spec(pytest.installable_kernel,
+                                 kernel_name='tstinstalled',
+                                 user=True)
+    assert 'tstinstalled' in pytest.ksm.find_kernel_specs()
+
+    # install again works
+    pytest.ksm.install_kernel_spec(pytest.installable_kernel,
+                                 kernel_name='tstinstalled',
+                                 user=True)
+    pytest.ksm.remove_kernel_spec('tstinstalled')
+
+
+def test_install_kernel_spec_prefix(tmpdir, setup_test):
+    capture = StringIO()
+    handler = StreamHandler(capture)
+    pytest.ksm.log.addHandler(handler)
+    pytest.ksm.install_kernel_spec(pytest.installable_kernel,
+                                 kernel_name='tstinstalled',
+                                 prefix=tmpdir.dirname)
+    captured = capture.getvalue()
+    pytest.ksm.log.removeHandler(handler)
+    assert "may not be found" in captured
+    assert 'tstinstalled' not in pytest.ksm.find_kernel_specs()
+
+    # add prefix to path, so we find the spec
+    pytest.ksm.kernel_dirs.append(pjoin(tmpdir.dirname, 'share', 'jupyter', 'kernels'))
+    assert 'tstinstalled' in pytest.ksm.find_kernel_specs()
+
+    # Run it again, no warning this time because we've added it to the path
+    capture = StringIO()
+    handler = StreamHandler(capture)
+    pytest.ksm.log.addHandler(handler)
+    pytest.ksm.install_kernel_spec(pytest.installable_kernel,
+                                 kernel_name='tstinstalled',
+                                 prefix=tmpdir.dirname)
+    captured = capture.getvalue()
+    pytest.ksm.log.removeHandler(handler)
+    assert "may not be found" not in captured
+    pytest.ksm.remove_kernel_spec('tstinstalled')
+
+@pytest.mark.skipif(
+    not (os.name != 'nt' and not os.access('/usr/local/share', os.W_OK)),
+    reason="needs Unix system without root privileges")
+def test_cant_install_kernel_spec(setup_test):
+    with pytest.raises(OSError):
+        pytest.ksm.install_kernel_spec(pytest.installable_kernel,
                                      kernel_name='tstinstalled',
-                                     user=True)
-        self.assertIn('tstinstalled', self.ksm.find_kernel_specs())
-        
-        # install again works
-        self.ksm.install_kernel_spec(self.installable_kernel,
-                                     kernel_name='tstinstalled',
-                                     user=True)
+                                     user=False)
 
-    def test_install_kernel_spec_prefix(self):
-        td = TemporaryDirectory()
-        self.addCleanup(td.cleanup)
-        capture = StringIO()
-        handler = StreamHandler(capture)
-        self.ksm.log.addHandler(handler)
-        self.ksm.install_kernel_spec(self.installable_kernel,
-                                     kernel_name='tstinstalled',
-                                     prefix=td.name)
-        captured = capture.getvalue()
-        self.ksm.log.removeHandler(handler)
-        self.assertIn("may not be found", captured)
-        self.assertNotIn('tstinstalled', self.ksm.find_kernel_specs())
 
-        # add prefix to path, so we find the spec
-        self.ksm.kernel_dirs.append(pjoin(td.name, 'share', 'jupyter', 'kernels'))
-        self.assertIn('tstinstalled', self.ksm.find_kernel_specs())
-    
-        # Run it again, no warning this time because we've added it to the path
-        capture = StringIO()
-        handler = StreamHandler(capture)
-        self.ksm.log.addHandler(handler)
-        self.ksm.install_kernel_spec(self.installable_kernel,
-                                     kernel_name='tstinstalled',
-                                     prefix=td.name)
-        captured = capture.getvalue()
-        self.ksm.log.removeHandler(handler)
-        self.assertNotIn("may not be found", captured)
+def test_remove_kernel_spec(setup_test):
+    path = pytest.ksm.remove_kernel_spec('sample')
+    assert path == pytest.sample_kernel_dir
 
-    @pytest.mark.skipif(
-        not (os.name != 'nt' and not os.access('/usr/local/share', os.W_OK)),
-        reason="needs Unix system without root privileges")
-    def test_cant_install_kernel_spec(self):
-        with self.assertRaises(OSError):
-            self.ksm.install_kernel_spec(self.installable_kernel,
-                                         kernel_name='tstinstalled',
-                                         user=False)
 
-    def test_remove_kernel_spec(self):
-        path = self.ksm.remove_kernel_spec('sample')
-        self.assertEqual(path, self.sample_kernel_dir)
+def test_remove_kernel_spec_app(setup_test):
+    p = Popen(
+        [sys.executable, '-m', 'jupyter_client.kernelspecapp', 'remove', 'sample', '-f'],
+        stdout=PIPE, stderr=STDOUT,
+        env=os.environ,
+    )
+    out, _ = p.communicate()
+    assert p.returncode == 0, out.decode('utf8', 'replace')
 
-    def test_remove_kernel_spec_app(self):
-        p = Popen(
-            [sys.executable, '-m', 'jupyter_client.kernelspecapp', 'remove', 'sample', '-f'],
-            stdout=PIPE, stderr=STDOUT,
-            env=os.environ,
-        )
-        out, _ = p.communicate()
-        self.assertEqual(p.returncode, 0, out.decode('utf8', 'replace'))
 
-    def test_validate_kernel_name(self):
-        for good in [
-            'julia-0.4',
-            'ipython',
-            'R',
-            'python_3',
-            'Haskell-1-2-3',
-        ]:
-            assert kernelspec._is_valid_kernel_name(good)
-        
-        for bad in [
-            'has space',
-            u'ünicode',
-            '%percent',
-            'question?',
-        ]:
-            assert not kernelspec._is_valid_kernel_name(bad)
+def test_validate_kernel_name(setup_test):
+    for good in [
+        'julia-0.4',
+        'ipython',
+        'R',
+        'python_3',
+        'Haskell-1-2-3',
+    ]:
+        assert kernelspec._is_valid_kernel_name(good)
 
-    def test_provider_find_kernel_specs(self):
-        kernels = self.prov_ksm.find_kernel_specs()
-        self.assertEqual(kernels['prov_sample2'], self.prov_sample2_kernel_dir)
-        self.assertNotIn('sample', kernels)
+    for bad in [
+        'has space',
+        u'ünicode',
+        '%percent',
+        'question?',
+    ]:
+        assert not kernelspec._is_valid_kernel_name(bad)
 
-    def test_provider_get_kernel_spec(self):
-        ks = self.prov_ksm.get_kernel_spec('PROV_SAMPLE1')  # Case insensitive
-        self.assertEqual(ks.resource_dir, self.prov_sample1_kernel_dir)
-        self.assertEqual(ks.argv, sample_kernel_json['argv'])
-        self.assertEqual(ks.display_name, sample_kernel_json['display_name'])
-        self.assertEqual(ks.env, {})
-        self.assertEqual(ks.metadata, {})
-        with self.assertRaises(kernelspec.NoSuchKernel):
-            self.prov_ksm.get_kernel_spec('sample')
 
-    def test_provider_find_all_specs(self):
-        kernels = self.prov_ksm.get_all_specs()
-        self.assertEqual(len(kernels), 2)
-        self.assertEqual(kernels['prov_sample1']['resource_dir'], self.prov_sample1_kernel_dir)
-        self.assertIsNotNone(kernels['prov_sample1']['spec'])
+def test_provider_find_kernel_specs(setup_test):
+    kernels = pytest.prov_ksm.find_kernel_specs()
+    assert kernels['prov_sample2'] == pytest.prov_sample2_kernel_dir
+    assert 'sample' not in kernels
+
+
+def test_provider_get_kernel_spec(setup_test):
+    ks = pytest.prov_ksm.get_kernel_spec('PROV_SAMPLE1')  # Case insensitive
+    assert ks.resource_dir == pytest.prov_sample1_kernel_dir
+    assert ks.argv == sample_kernel_json['argv']
+    assert ks.display_name == sample_kernel_json['display_name']
+    assert ks.env == {}
+    assert ks.metadata == {}
+    with pytest.raises(kernelspec.NoSuchKernel):
+        pytest.prov_ksm.get_kernel_spec('sample')
+
+
+def test_provider_find_all_specs(setup_test):
+    kernels = pytest.prov_ksm.get_all_specs()
+    assert len(kernels) == 2
+    assert kernels['prov_sample1']['resource_dir'] == pytest.prov_sample1_kernel_dir
+    assert kernels['prov_sample1']['spec'] is not None
