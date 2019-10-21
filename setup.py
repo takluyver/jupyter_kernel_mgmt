@@ -71,7 +71,7 @@ setup_args = dict(
         'entrypoints',
     ],
     extras_require   = {
-        'test': ['ipykernel', 'ipython', 'pytest', 'pytest-asyncio'],
+        'test': ['ipykernel', 'ipython', 'pytest', 'pytest-asyncio', 'async_generator'],
     },
     python_requires = ">=3.5",
     cmdclass         = {

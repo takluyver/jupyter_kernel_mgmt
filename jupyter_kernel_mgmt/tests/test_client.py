@@ -11,7 +11,7 @@ pjoin = os.path.join
 from ipykernel.kernelspec import make_ipkernel_cmd
 from jupyter_protocol.messages import Message
 from ..subproc.launcher import start_new_kernel
-from .utils import setup_env, run_sync
+from .utils import run_sync
 
 from IPython.utils.capture import capture_output
 

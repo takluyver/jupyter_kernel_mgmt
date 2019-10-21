@@ -12,7 +12,6 @@ import sys
 import time
 from ipykernel.kernelspec import make_ipkernel_cmd
 from jupyter_kernel_mgmt.subproc.async_manager import start_new_kernel
-from .utils import skip_win32, setup_env
 from ..util import maybe_future
 
 TIMEOUT = 10
@@ -21,7 +20,7 @@ SIGNAL_KERNEL_CMD = [sys.executable, '-m', 'jupyter_kernel_mgmt.tests.signalkern
                          '-f', '{connection_file}']
 
 
-@skip_win32
+@pytest.mark.skipif(sys.platform.startswith('win'), reason="Windows")
 @pytest.mark.asyncio
 async def test_signal_kernel_subprocesses(setup_env):
     km, kc = await start_new_kernel(SIGNAL_KERNEL_CMD, startup_timeout=TIMEOUT)

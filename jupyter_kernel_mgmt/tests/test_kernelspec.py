@@ -5,7 +5,6 @@
 # Distributed under the terms of the Modified BSD License.
 
 import io
-import copy
 import json
 from logging import StreamHandler
 import os
@@ -24,7 +23,7 @@ else:
 from ipython_genutils.tempdir import TemporaryDirectory
 from jupyter_kernel_mgmt import kernelspec
 from jupyter_core import paths
-from .utils import install_sample_kernel, setup_env, sample_kernel_json
+from .utils import install_sample_kernel, sample_kernel_json
 
 
 @pytest.fixture
@@ -124,7 +123,7 @@ def test_install_kernel_spec_prefix(tmpdir, setup_test):
     pytest.ksm.remove_kernel_spec('tstinstalled')
 
 @pytest.mark.skipif(
-    not (os.name != 'nt' and not os.access('/usr/local/share', os.W_OK)),
+    (os.name == 'nt' or os.access('/usr/local/share', os.W_OK)),
     reason="needs Unix system without root privileges")
 def test_cant_install_kernel_spec(setup_test):
     with pytest.raises(OSError):
