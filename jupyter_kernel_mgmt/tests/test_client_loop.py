@@ -12,13 +12,13 @@ except ImportError:
 
 pjoin = os.path.join
 
+from async_generator import yield_, async_generator
 from ipykernel.kernelspec import make_ipkernel_cmd
 from jupyter_protocol.messages import Message
 from jupyter_kernel_mgmt.subproc.async_manager import (
     AsyncSubprocessKernelLauncher, start_new_kernel
 )
 from jupyter_kernel_mgmt.client import ClientInThread
-from .utils import setup_env
 
 from ipython_genutils.py3compat import string_types
 
@@ -27,6 +27,7 @@ TIMEOUT = 30
 pytestmark = pytest.mark.asyncio
 
 @pytest.fixture
+@async_generator
 async def setup_test(setup_env):
 
     # Start a client in a new thread, put received messages in queues.
@@ -38,7 +39,7 @@ async def setup_test(setup_env):
     if not pytest.kc.kernel_responding.wait(10.0):
         raise RuntimeError("Failed to start kernel client")
     pytest.kc.add_handler(_queue_msg, {'shell', 'iopub'})
-    yield pytest.kc
+    await yield_(pytest.kc)
     pytest.kc.shutdown()
     pytest.kc.close()
     await km.kill()

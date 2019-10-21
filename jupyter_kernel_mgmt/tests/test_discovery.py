@@ -6,7 +6,6 @@
 import os
 import logging
 import pytest
-import shutil
 import sys
 
 from os.path import join as pjoin
@@ -14,7 +13,7 @@ from jupyter_kernel_mgmt import discovery, kernelspec
 from jupyter_kernel_mgmt.managerabc import KernelManagerABC
 from jupyter_kernel_mgmt.subproc.manager import KernelManager
 from jupyter_core import paths
-from .utils import install_sample_kernel, setup_env
+from .utils import install_sample_kernel
 from traitlets import List, Unicode
 from traitlets.config import Application, SingletonConfigurable
 
