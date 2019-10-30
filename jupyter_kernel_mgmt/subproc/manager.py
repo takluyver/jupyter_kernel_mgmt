@@ -5,11 +5,9 @@
 
 from __future__ import absolute_import
 
-import asyncio
 import logging
 import os
 import signal
-import six
 import subprocess
 import sys
 import uuid
@@ -50,27 +48,18 @@ class KernelManager(KernelManagerABC):
             await maybe_future(self.kernel.wait())
             return False
 
-        if six.PY3:
-            try:
-                await maybe_future(self.kernel.wait(timeout))
-                return False
-            except subprocess.TimeoutExpired:
-                return True
-        else:
-            pollinterval = 0.1
-            for i in range(int(timeout / pollinterval)):
-                if self.is_alive():
-                    await asyncio.sleep(pollinterval)
-                else:
-                    return False
-            return await self.is_alive()
+        try:
+            await maybe_future(self.kernel.wait(timeout))
+            return False
+        except subprocess.TimeoutExpired:
+            return True
 
     async def cleanup(self):
         """Clean up resources when the kernel is shut down"""
         # cleanup connection files on full shutdown of kernel we started
         for f in self.files_to_cleanup:
             try:
-                await maybe_future(os.remove(f))
+                os.remove(f)
             except (IOError, OSError, AttributeError):
                 pass
 
@@ -124,7 +113,7 @@ class KernelManager(KernelManagerABC):
         if hasattr(os, "getpgid") and hasattr(os, "killpg"):
             try:
                 pgid = os.getpgid(self.kernel.pid)
-                await maybe_future(os.killpg(pgid, signum))
+                os.killpg(pgid, signum)
                 return
             except OSError:
                 pass
