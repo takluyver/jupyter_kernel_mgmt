@@ -10,7 +10,7 @@ TIMEOUT = 10
 
 pytestmark = pytest.mark.asyncio
 
-async def test_start_new_kernel():
+async def test_get_connect_info():
     launcher = AsyncSubprocessKernelLauncher(make_ipkernel_cmd(), os.getcwd())
     info, km = await launcher.launch()
     try:
@@ -24,7 +24,7 @@ async def test_start_new_kernel():
         await km.cleanup()
 
 
-async def test_get_connect_info():
+async def test_start_new_kernel():
     km, kc = await start_new_kernel(make_ipkernel_cmd(), startup_timeout=TIMEOUT)
     try:
         assert await km.is_alive()
