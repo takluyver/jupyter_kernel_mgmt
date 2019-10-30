@@ -20,12 +20,12 @@ TIMEOUT = 30
 # pytestmark = pytest.mark.asyncio
 #
 @pytest.fixture
-def setup_test(setup_env):
-    pytest.km, pytest.kc = start_new_kernel(kernel_cmd=make_ipkernel_cmd())
-    yield pytest.km, pytest.kc
-    pytest.kc.shutdown_or_terminate()
-    pytest.kc.close()
-    run_sync(pytest.km.kill())
+def kernel_client(setup_env):
+    km, kc = start_new_kernel(kernel_cmd=make_ipkernel_cmd())
+    yield kc
+    kc.shutdown_or_terminate()
+    kc.close()
+    run_sync(km.kill())
 
 
 def _check_reply(reply_type, reply):
@@ -34,40 +34,38 @@ def _check_reply(reply_type, reply):
     assert reply.parent_header['msg_type'] == reply_type + '_request'
 
 
-def test_execute_interactive(setup_test):
-    kc = pytest.kc
-
+def test_execute_interactive(kernel_client):
     with capture_output() as io:
-        reply = kc.execute_interactive("print('hello')", timeout=TIMEOUT)
+        reply = kernel_client.execute_interactive("print('hello')", timeout=TIMEOUT)
     assert 'hello' in io.stdout
     assert reply.content['status'] == 'ok'
 
 
-def test_history(setup_test):
-    reply = pytest.kc.history(session=0)
+def test_history(kernel_client):
+    reply = kernel_client.history(session=0)
     _check_reply('history', reply)
 
 
-def test_inspect(setup_test):
-    reply = pytest.kc.inspect('code')
+def test_inspect(kernel_client):
+    reply = kernel_client.inspect('code')
     _check_reply('inspect', reply)
 
 
-def test_complete(setup_test):
-    reply = pytest.kc.complete('code')
+def test_complete(kernel_client):
+    reply = kernel_client.complete('code')
     _check_reply('complete', reply)
 
 
-def test_kernel_info(setup_test):
-    reply = pytest.kc.kernel_info()
+def test_kernel_info(kernel_client):
+    reply = kernel_client.kernel_info()
     _check_reply('kernel_info', reply)
 
 
-def test_comm_info(setup_test):
-    reply = pytest.kc.comm_info()
+def test_comm_info(kernel_client):
+    reply = kernel_client.comm_info()
     _check_reply('comm_info', reply)
 
 
-def test_shutdown(setup_test):
-    reply = pytest.kc.shutdown()
+def test_shutdown(kernel_client):
+    reply = kernel_client.shutdown()
     _check_reply('shutdown', reply)

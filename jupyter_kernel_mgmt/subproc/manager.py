@@ -45,11 +45,11 @@ class KernelManager(KernelManagerABC):
         """"""
         if timeout is None:
             # Wait indefinitely
-            await maybe_future(self.kernel.wait())
+            self.kernel.wait()
             return False
 
         try:
-            await maybe_future(self.kernel.wait(timeout))
+            self.kernel.wait(timeout)
             return False
         except subprocess.TimeoutExpired:
             return True
@@ -69,7 +69,7 @@ class KernelManager(KernelManagerABC):
         # Signal the kernel to terminate (sends SIGKILL on Unix and calls
         # TerminateProcess() on Win32).
         try:
-            await maybe_future(self.kernel.kill())
+            self.kernel.kill()
         except OSError as e:
             # In Windows, we will get an Access Denied error if the process
             # has already terminated. Ignore it.
@@ -117,7 +117,7 @@ class KernelManager(KernelManagerABC):
                 return
             except OSError:
                 pass
-        await maybe_future(self.kernel.send_signal(signum))
+        self.kernel.send_signal(signum)
 
     async def is_alive(self):
         """Is the kernel process still running?"""
