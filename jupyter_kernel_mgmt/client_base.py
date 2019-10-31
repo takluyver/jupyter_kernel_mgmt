@@ -149,9 +149,9 @@ class KernelClient(object):
     # flag for whether execute requests should be allowed to call raw_input:
     allow_stdin = True
 
-    def is_alive(self):
+    async def is_alive(self):
         if self.owned_kernel:
-            return self.manager.is_alive()
+            return await self.manager.is_alive()
         elif self.using_heartbeat:
             return self.hb_monitor.is_beating()
         else:

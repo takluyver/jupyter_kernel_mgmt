@@ -11,8 +11,7 @@ import signal
 import sys
 import time
 from ipykernel.kernelspec import make_ipkernel_cmd
-from jupyter_kernel_mgmt.subproc.async_manager import start_new_kernel
-from ..util import maybe_future
+from jupyter_kernel_mgmt.subproc.launcher import start_new_kernel
 
 TIMEOUT = 10
 
@@ -42,7 +41,7 @@ async def test_signal_kernel_subprocesses(setup_env):
         fut = kc.execute('sleep')
         time.sleep(1)  # ensure sleep message has been handled before we interrupt
         await kc.interrupt()
-        reply = await maybe_future(fut)
+        reply = await fut
         content = reply.content
         assert content['status'] == 'ok'
         assert content['user_expressions']['interrupted']

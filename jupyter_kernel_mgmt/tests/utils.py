@@ -28,10 +28,6 @@ def execute(code='', kc=None, **kwargs):
     return msg_id, reply['content']
 
 
-def run_sync(coro_method):
-    return asyncio.get_event_loop().run_until_complete(coro_method)
-
-
 sample_kernel_json = {'argv':['cat', '{connection_file}'],
                       'display_name':'Test kernel',
                       'metadata': {}
