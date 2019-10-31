@@ -1,5 +1,6 @@
 """Machinery for launching a kernel in a local subprocess.
 """
+import asyncio
 from binascii import b2a_hex
 from contextlib import contextmanager
 import errno
@@ -20,13 +21,16 @@ from jupyter_core.paths import jupyter_runtime_dir, secure_write
 from jupyter_core.utils import ensure_dir_exists
 from ..localinterfaces import localhost, is_local_ip, local_ips
 from .manager import KernelManager
+from ..util import run_sync
 
 port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port',
               'hb_port']
 
 
 class SubprocessKernelLauncher:
-    """Launch kernels in a subprocess.
+    """Run a kernel asynchronously in a subprocess.
+
+    This is the async counterpart to SubprocessKernelLauncher.
 
     Parameters
     ----------
@@ -62,7 +66,7 @@ class SubprocessKernelLauncher:
                                "Currently valid addresses are: %s" % local_ips()
                                )
 
-    def launch(self):
+    async def launch(self):
         """The main method to launch a kernel.
 
         Returns (connection_info,  kernel_manager)
@@ -73,13 +77,13 @@ class SubprocessKernelLauncher:
         win_interrupt_evt = prepare_interrupt_event(kw['env'])
 
         # launch the kernel subprocess
-        self.log.debug("Starting kernel cmd: %s", kw['args'])
-        kernel = Popen(**kw)
+        args = kw.pop('args')
+        self.log.debug("Starting kernel cmd: %s", args)
+        kernel = await asyncio.create_subprocess_exec(*args, **kw)
         kernel.stdin.close()
 
         files_to_cleanup = list(self.files_to_cleanup(conn_file, conn_info))
-        mgr = KernelManager(kernel, files_to_cleanup,
-                            win_interrupt_evt=win_interrupt_evt)
+        mgr = KernelManager(kernel, files_to_cleanup, win_interrupt_evt=win_interrupt_evt)
         return conn_info, mgr
 
     def files_to_cleanup(self, connection_file, connection_info):
@@ -329,19 +333,19 @@ def prepare_interrupt_event(env, interrupt_event=None):
         return interrupt_event
 
 
-def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_params=None):
+async def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_params=None):
     """Start a new kernel, and return its Manager and a blocking client"""
-    from ..client import BlockingKernelClient
+    from ..client import IOLoopKernelClient
     cwd = cwd or os.getcwd()
 
     launcher = SubprocessKernelLauncher(kernel_cmd, cwd=cwd, launch_params=launch_params)
-    connection_info, km = launcher.launch()
-    kc = BlockingKernelClient(connection_info, manager=km)
+    info, km = await launcher.launch()
+    kc = IOLoopKernelClient(info, manager=km)
     try:
-        kc.wait_for_ready(timeout=startup_timeout)
+        await asyncio.wait_for(kc.wait_for_ready(), timeout=startup_timeout)
     except RuntimeError:
-        kc.shutdown_or_terminate()
-        kc.close()
+        await kc.shutdown_or_terminate()
+        await kc.close()
         raise
 
     return km, kc
@@ -357,7 +361,7 @@ def run_kernel(kernel_cmd, **kwargs):
     -------
     kernel_client: connected KernelClient instance
     """
-    km, kc = start_new_kernel(kernel_cmd, **kwargs)
+    km, kc = run_sync(start_new_kernel(kernel_cmd, **kwargs))
     try:
         yield kc
     finally:

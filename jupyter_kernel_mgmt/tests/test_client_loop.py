@@ -9,7 +9,7 @@ from async_generator import yield_, async_generator
 from ipykernel.kernelspec import make_ipkernel_cmd
 from ipython_genutils.py3compat import string_types
 from jupyter_protocol.messages import Message
-from jupyter_kernel_mgmt.subproc.async_manager import AsyncSubprocessKernelLauncher
+from jupyter_kernel_mgmt.subproc.launcher import SubprocessKernelLauncher
 from jupyter_kernel_mgmt.client import ClientInThread
 from queue import Queue
 
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.asyncio
 @async_generator
 async def setup_client(setup_env):
     # Start a client in a new thread, put received messages in queues.
-    launcher = AsyncSubprocessKernelLauncher(make_ipkernel_cmd(), cwd='.')
+    launcher = SubprocessKernelLauncher(make_ipkernel_cmd(), cwd='.')
     connection_info, km = await launcher.launch()
     kc = ClientInThread(connection_info, manager=km)
     received = {'shell': Queue(), 'iopub': Queue()}

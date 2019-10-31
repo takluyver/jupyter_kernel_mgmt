@@ -143,8 +143,6 @@ def setup_test(setup_env):
                    }
     install_sample_kernel(pjoin(paths.jupyter_data_dir(), 'kernels'), 'params_kspec', 'params_kspec.json',
                           kernel_json=params_json)
-    #yield pjoin(paths.jupyter_data_dir(), 'kernels')
-    #shutil.rmtree(pjoin(paths.jupyter_data_dir(), 'kernels'))
 
 
 async def test_ipykernel_provider():

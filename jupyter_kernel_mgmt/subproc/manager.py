@@ -5,6 +5,7 @@
 
 from __future__ import absolute_import
 
+import asyncio
 import logging
 import os
 import signal
@@ -17,7 +18,6 @@ log = logging.getLogger(__name__)
 from traitlets.log import get_logger as get_app_logger
 
 from ..managerabc import KernelManagerABC
-from ..util import maybe_future
 
 
 class KernelManager(KernelManagerABC):
@@ -40,18 +40,14 @@ class KernelManager(KernelManagerABC):
         self.win_interrupt_evt = win_interrupt_evt
         self.log = get_app_logger()
         self.kernel_id = str(uuid.uuid4())
+        self._exit_future = asyncio.ensure_future(self.kernel.wait())
 
     async def wait(self, timeout):
         """"""
-        if timeout is None:
-            # Wait indefinitely
-            self.kernel.wait()
-            return False
-
         try:
-            self.kernel.wait(timeout)
+            await asyncio.wait_for(self.kernel.wait(), timeout)
             return False
-        except subprocess.TimeoutExpired:
+        except asyncio.TimeoutError:
             return True
 
     async def cleanup(self):
@@ -84,7 +80,7 @@ class KernelManager(KernelManagerABC):
                     raise
 
         # Block until the kernel terminates.
-        await maybe_future(self.kernel.wait())
+        await self.kernel.wait()
 
     async def interrupt(self):
         """Interrupts the kernel by sending it a signal.
@@ -121,6 +117,5 @@ class KernelManager(KernelManagerABC):
 
     async def is_alive(self):
         """Is the kernel process still running?"""
-        poll_result = await maybe_future(self.kernel.poll())
-        return poll_result is None
+        return not self._exit_future.done()
 

@@ -83,9 +83,8 @@ class KernelSpecProvider(KernelProviderBase):
             }
 
     async def launch(self, name, cwd=None, launch_params=None):
-        from .subproc.async_manager import AsyncSubprocessKernelLauncher
         spec = self.ksm.get_kernel_spec(name)
-        return await AsyncSubprocessKernelLauncher(
+        return await SubprocessKernelLauncher(
             kernel_cmd=spec.argv, extra_env=spec.env, cwd=cwd, launch_params=launch_params).launch()
 
 
@@ -121,11 +120,10 @@ class IPykernelProvider(KernelProviderBase):
             }
 
     async def launch(self, name, cwd=None, launch_params=None):
-        from .subproc.async_manager import AsyncSubprocessKernelLauncher
         info = self._check_for_kernel()
         if info is None:
             raise Exception("ipykernel is not importable")
-        return await AsyncSubprocessKernelLauncher(
+        return await SubprocessKernelLauncher(
             kernel_cmd=info['spec']['argv'], extra_env={}, cwd=cwd, launch_params=launch_params).launch()
 
 

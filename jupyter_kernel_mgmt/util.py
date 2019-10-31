@@ -4,8 +4,6 @@
 # Distributed under the terms of the Modified BSD License.
 
 import asyncio
-import concurrent.futures
-import inspect
 
 
 def inherit_docstring(cls):
@@ -16,17 +14,5 @@ def inherit_docstring(cls):
     return decorator
 
 
-def maybe_future(obj):
-    """Like tornado's deprecated gen.maybe_future
-    but more compatible with asyncio for recent versions
-    of tornado
-    """
-    if inspect.isawaitable(obj):
-        return asyncio.ensure_future(obj)
-    elif isinstance(obj, concurrent.futures.Future):
-        return asyncio.wrap_future(obj)
-    else:
-        # not awaitable, wrap scalar in future
-        f = asyncio.Future()
-        f.set_result(obj)
-        return f
+def run_sync(coro_method):
+    return asyncio.get_event_loop().run_until_complete(coro_method)

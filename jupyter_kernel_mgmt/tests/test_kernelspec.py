@@ -29,39 +29,37 @@ from .utils import install_sample_kernel, sample_kernel_json
 @pytest.fixture
 def sample_kernel_dir(setup_env):
     kernel_dir = install_sample_kernel(pjoin(paths.jupyter_data_dir(), 'kernels'))
-    yield kernel_dir
+    return kernel_dir
 
 
 @pytest.fixture
 def prov_sample1_kernel_dir(setup_env):
     kernel_dir = install_sample_kernel(
         pjoin(paths.jupyter_data_dir(), 'kernels'), 'prov_sample1', 'prov_kernel.json')
-    yield kernel_dir
+    return kernel_dir
 
 
 @pytest.fixture
 def prov_sample2_kernel_dir(setup_env):
-
     kernel_dir = install_sample_kernel(
         pjoin(paths.jupyter_data_dir(), 'kernels'), 'prov_sample2', 'prov_kernel.json')
-    yield kernel_dir
+    return kernel_dir
 
 
 @pytest.fixture
 def ksm(setup_env):
     spec_mgr = kernelspec.KernelSpecManager()
-    yield spec_mgr
+    return spec_mgr
 
 
 @pytest.fixture
 def prov_ksm(setup_env):
     spec_mgr = kernelspec.KernelSpecManager(kernel_file='prov_kernel.json')
-    yield spec_mgr
+    return spec_mgr
 
 
 @pytest.fixture
 def installable_kernel(setup_env):
-
     td2 = TemporaryDirectory()
     kernel_dir = td2.name
     with open(pjoin(kernel_dir, 'kernel.json'), 'w') as f:
@@ -69,27 +67,6 @@ def installable_kernel(setup_env):
 
     yield kernel_dir
     shutil.rmtree(kernel_dir)
-
-
-# @pytest.fixture
-# def setup_test(setup_env):
-#     pytest.sample_kernel_dir = install_sample_kernel(
-#         pjoin(paths.jupyter_data_dir(), 'kernels'))
-#     pytest.prov_sample1_kernel_dir = install_sample_kernel(
-#         pjoin(paths.jupyter_data_dir(), 'kernels'), 'prov_sample1', 'prov_kernel.json')
-#     pytest.prov_sample2_kernel_dir = install_sample_kernel(
-#         pjoin(paths.jupyter_data_dir(), 'kernels'), 'prov_sample2', 'prov_kernel.json')
-#
-#     pytest.ksm = kernelspec.KernelSpecManager()
-#     pytest.prov_ksm = kernelspec.KernelSpecManager(kernel_file='prov_kernel.json')
-#
-#     td2 = TemporaryDirectory()
-#     pytest.installable_kernel = td2.name
-#     with open(pjoin(pytest.installable_kernel, 'kernel.json'), 'w') as f:
-#         json.dump(sample_kernel_json, f)
-#
-#     yield pytest.installable_kernel
-#     shutil.rmtree(pytest.installable_kernel)
 
 
 def test_find_kernel_specs(ksm, sample_kernel_dir):
