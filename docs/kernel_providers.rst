@@ -36,7 +36,7 @@ and overriding two methods.
     
       Launches the kernel and returns a 2-tuple: (connection_info, kernel_manager).
       *connection_info* is a dictionary consisting of the connection information 
-      relative to the launched kernel.
+      pertaining to the launched kernel.
       *kernel_manager* is a :class:`KernelManager <.KernelManagerABC>` instance.
 
       *name* is a name returned from :meth:`find_kernels`.
@@ -131,16 +131,35 @@ Included kernel providers
 ``jupyter_kernel_mgmt`` includes two kernel providers in its distribution.
 
 1. :class:`KernelSpecProvider <jupyter_kernel_mgmt.discovery.KernelSpecProvider>` handles the discovery and launch
-of most existing kernelspec-based kernels that exist today.  If a provider id is not provided
-when calling :meth:`KernelFinder.launch(name) <.KernelFinder.launch>`, KernelFinder will assume its associated with
-a kernelspec provider and use :class:`KernelSpecProvider <jupyter_kernel_mgmt.discovery.KernelSpecProvider>` to
-perform the launch.
+of most existing kernelspec-based kernels that exist today.
 
-2. :class:`IPykernelProvider <jupyter_kernel_mgmt.discovery.IPykernelProvider>` handles the discover and launch of any
-IPython kernel that is located in the executing python's interpreter.  For example, if the
-application is running in a virtual Python environment, this provider identifies any IPython
-kernels that are local to that environment and may not be identified by the path algorithm
+2. :class:`IPykernelProvider <jupyter_kernel_mgmt.discovery.IPykernelProvider>` handles the discover and launch
+of any IPython kernel that is located in the executing python's interpreter.  For example, if the
+application is running in a virtual Python environment, this provider identifies if any IPython
+kernel is local to that environment and may not be identified by the path algorithm
 used by :class:`KernelSpecProvider <jupyter_kernel_mgmt.discovery.KernelSpecProvider>`.
+
+.. _included_launchers:
+
+Included kernel launchers
+=========================
+
+The kernel provider is responsible for launching the kernel and returning the connection
+information and :ref:`kernel manager <kernel_manager_api>` instance.  Typically, a provider
+will implement a `launcher` to perform this action.
+
+For those providers launching their kernels using the subprocess module's Popen class,
+``jupyter_kernel_mgmt`` includes two kernel launcher implementations in its distribution.
+
+1. :class:`SubprocessKernelLauncher <.SubprocessKernelLauncher>` launches kernels using
+the 'tcp' transport.
+
+2. :class:`SubprocessIPCKernelLauncher <.SubprocessIPCKernelLauncher>` launchers kernels using
+the 'ipc' transport (using filesystem sockets).
+
+Both launchers return the resulting connection information and an instance of
+:class:`KernelManager <.KernelManager>`, which is subsequently used to manage the
+rest of the kernel's lifecycle.
 
 
 Glossary

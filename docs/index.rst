@@ -15,7 +15,7 @@ refer to the `Jupyter Protocol documentation (FIXME) <https://jupyter-client.rea
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Documentation
+   :caption: Application Developers
 
    kernel_finder
    kernel_manager
@@ -24,7 +24,7 @@ refer to the `Jupyter Protocol documentation (FIXME) <https://jupyter-client.rea
 
 .. toctree::
    :maxdepth: 2
-   :caption: Developer documentation
+   :caption: Kernel Provider Developers
 
    kernel_providers
 

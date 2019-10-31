@@ -8,6 +8,7 @@ Kernel Management APIs
 
    finder
    providers
+   launchers
    manager
    client
    restarter

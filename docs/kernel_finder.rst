@@ -4,15 +4,14 @@
 Kernel Discovery
 ================
 
-The primary purpose of the Jupyter Kernel management package is to provide
+A primary purpose of the Jupyter Kernel management package is to provide
 a means of discovering kernels that are available for use.  This is accomplished
 using the :class:`KernelFinder <jupyter_kernel_mgmt.discovery.KernelFinder>` class.
 
 :class:`KernelFinder <jupyter_kernel_mgmt.discovery.KernelFinder>` instances are created in one of two ways.
 
-1. The most common way is to call KernelFinder's class method 
-:meth:`.KernelFinder.from_entrypoints()`. This loads all of the registered
-kernel providers.
+1. The most common way is to call KernelFinder's class method
+:meth:`.KernelFinder.from_entrypoints()`. This loads all registered kernel providers.
 
 2. You can also provide a list of :class:`KernelProvider <jupyter_kernel_mgmt.discovery.KernelProviderBase>`
 instances via KernelFinder's initializer: :meth:`KernelFinder(providers) <jupyter_kernel_mgmt.discovery.KernelFinder>`.
@@ -32,9 +31,9 @@ the set of loaded kernel providers calling each of their
 :meth:`KernelProvider.find_kernels() <.KernelProviderBase.find_kernels()>` methods
 yielding each entry.
 
-Each entry, commonly referred to as a :ref:`kernel specification <kernelspecs>`, is a JSON serialized
-dictionary consisting of the fields necessary to describe and use the associated kernel.  Some
-providers may return additional information in the `metadata` stanza of the result.
+Each entry, commonly referred to as a :ref:`kernel specification <kernelspecs>`, is a dictionary
+consisting of the fields necessary to describe the associated kernel and assist users in their
+selection.  Some providers may return additional information in the `metadata` stanza of the result.
 
 
 .. _kernelspecs:
@@ -101,7 +100,7 @@ Kernel Specification Format
 
 The information contained in each entry returned from a Kernel Provider's
 :meth:`find_kernels() <.KernelProviderBase.find_kernels>` method consists of a
-JSON serialised dictionary containing the following keys and values:
+dictionary containing the following keys and values:
 
 - **display_name**: The kernel's name as it should be displayed in the UI.
   Unlike the kernel name used in the API, this can contain arbitrary unicode
@@ -112,6 +111,15 @@ JSON serialised dictionary containing the following keys and values:
   This allows a notebook written on any Python or Julia kernel to be properly
   associated with the user's Python or Julia kernel, even if they aren't listed
   under the same name as the author's. This value should be provided by all kernel providers.
+- **metadata** (optional): A dictionary of additional attributes about this
+  kernel. Metadata added here should be namespaced for the tool reading and
+  writing that metadata.
+
+Kernelspec-based providers obtain this information from a `kernel.json` file located in a
+directory pertaining to the kernel's name.  Other fields in the kernel.json file include
+information used to launch and manage the kernel.  As a result, you'll also find the following
+fields in `kernel.json` files:
+
 - **argv**: (optional): A list of command line arguments used to start the kernel. For
   instances of class :class:`KernelSpecProvider <jupyter_kernel_mgmt.discovery.KernelSpecProvider>` the text
   ``{connection_file}`` in any argument will be replaced with the path to the
@@ -122,17 +130,14 @@ JSON serialised dictionary containing the following keys and values:
   either by sending an interrupt ``signal`` via the operating system's
   signalling facilities (e.g. `SIGINT` on POSIX systems), or by sending an
   ``interrupt_request`` message on the control channel (see
-  :ref:`kernel interrupt (FIXME ref jupyter_protocol) <jupyter_client:msging_interrupt>`).
-  If this is not specified
-  the client will default to ``signal`` mode.  Because providers are responsible
-  for interrupting the kernel they launch, interpretation of this field is purely
-  the responsibility of the provider.
+  :ref:`kernel interrupt <jupyter_protocol:msging_interrupt>`).
+  If this is not specified ``signal`` mode will be used.
 - **env** (optional): A dictionary of environment variables to set for the kernel.
   These will be added to the current environment variables before the kernel is
   started.
-- **metadata** (optional): A dictionary of additional attributes about this
-  kernel. Metadata added here should be namespaced for the tool reading and
-  writing that metadata.
+
+However, whether a provider exposes information used during their kernel's
+launch is entirely up to the provider.
 
 
 Launching kernels
@@ -144,22 +149,25 @@ the kernel's `fully qualified kernel type` is provided to KernelFinder's
 
 .. note::
    A **fully qualified kernel type** includes a prefix of the kernel's :ref:`provider id <provider_id>` followed by a
-   forward slash ('/').  For example, the ``python3`` kernel as provided by the ``KernelSpecProvider``
+   forward slash ('/').  For example, the ``python3`` kernel as provided by the
+   :class:`KernelSpecProvider <jupyter_kernel_mgmt.discovery.KernelSpecProvider>`
    would have a fully qualified kernel type of ``spec/python3``.
 
-   If no prefix is found, ``KernelFinder`` will apply a prefix of ``spec/`` since nearly all existing
-   kernel specifications can be handled by the
-   :class:`KernelSpecProvider <jupyter_kernel_mgmt.discovery.KernelSpecProvider>`.
+   The application is responsible for ensuring the name passed to
+   :meth:`KernelFinder.launch() <.KernelFinder.launch>` is prefixed with a provider id.  For backwards
+   compatibility with existing kernelspecs, a prefix of ``spec/`` is recommended in such cases so as to associate it with
+   the ``KernelSpecProvider``.
 
-KernelFinder's launch method then locates the provider and call's the specific kernel provider's
+KernelFinder's launch method then locates the provider and calls the specific kernel provider's
 :meth:`launch() <jupyter_kernel_mgmt.discovery.KernelProviderBase.launch>` method.
 
 :py:meth:`KernelFinder.launch(name, cwd=None, launch_params=None) <jupyter_kernel_mgmt.discovery.KernelProviderBase.launch>`
 takes two additional (and optional) arguments.
 
-**cwd** (optional) specifies the current working directory relative to the notebook that will be associated
-with the launched kernel.  For :class:`KernelSpecProvider-based <.KernelSpecProvider>` kernels, the kernel
-process will use this value as the working directory for the subsequent Popen subprocess.
+**cwd** (optional) specifies the current working directory relative to the notebook.  Use of this value
+is up to the provider.  For :class:`KernelSpecProvider-based <.KernelSpecProvider>` kernels, the kernel
+process will use this value as the working directory for the subsequent Popen subprocess.  Other providers
+may choose to ignore ``cwd`` entirely.
 
 **launch_params** (optional) specifies a dictionary of provider-specific name/value pairs that can can
 be used during the kernel's launch.  What parameters are used can also be specified in the form of JSON

@@ -241,7 +241,8 @@ class SubprocessKernelLauncher:
 
         return kwargs
 
-class SubrocessIPCKernelLauncher(SubprocessKernelLauncher):
+
+class SubprocessIPCKernelLauncher(SubprocessKernelLauncher):
     """Start a kernel on this machine to listen on IPC (filesystem) sockets"""
     transport = 'ipc'
 

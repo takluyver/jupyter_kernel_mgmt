@@ -92,7 +92,7 @@ class KernelSpecProvider(KernelProviderBase):
 class IPykernelProvider(KernelProviderBase):
     """
     Offers a kernel type using the Python interpreter it's running in.
-    This checks if ipykernel is importable first.  If import fails, no action is performed.
+    This checks if ipykernel is importable first.  If import fails, it doesn't offer a kernel type.
     """
     id = 'pyimport'
 
