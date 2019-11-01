@@ -30,8 +30,6 @@ port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port',
 class SubprocessKernelLauncher:
     """Run a kernel asynchronously in a subprocess.
 
-    This is the async counterpart to SubprocessKernelLauncher.
-
     Parameters
     ----------
 

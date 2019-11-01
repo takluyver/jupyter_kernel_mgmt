@@ -42,13 +42,9 @@ class KernelManager(KernelManagerABC):
         self.kernel_id = str(uuid.uuid4())
         self._exit_future = asyncio.ensure_future(self.kernel.wait())
 
-    async def wait(self, timeout):
-        """"""
-        try:
-            await asyncio.wait_for(self.kernel.wait(), timeout)
-            return False
-        except asyncio.TimeoutError:
-            return True
+    async def wait(self):
+        """Wait for kernel to terminate"""
+        await self.kernel.wait()
 
     async def cleanup(self):
         """Clean up resources when the kernel is shut down"""
@@ -79,7 +75,7 @@ class KernelManager(KernelManagerABC):
                 if e.errno != ESRCH:
                     raise
 
-        # Block until the kernel terminates.
+        # Wait until the kernel terminates.
         await self.kernel.wait()
 
     async def interrupt(self):
