@@ -3,7 +3,7 @@
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
 
-import os
+import asyncio
 import logging
 import pytest
 import sys
@@ -22,6 +22,7 @@ class DummyKernelProvider(discovery.KernelProviderBase):
     """A dummy kernel provider for testing KernelFinder"""
     id = 'dummy'
 
+    @asyncio.coroutine
     def find_kernels(self):
         yield 'sample', {'argv': ['dummy_kernel']}
 
@@ -89,6 +90,7 @@ class TestConfigKernelProvider(DummyKernelProvider):
     config = None
     argv = ['dummy_config_kernel']  # will be replace by config item
 
+    @asyncio.coroutine
     def find_kernels(self):
         argv = self.argv
         if self.config:
