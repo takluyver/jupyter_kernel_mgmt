@@ -26,19 +26,32 @@ class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
 
     @abstractmethod
     async def launch(self, name, cwd=None, launch_params=None):
-        """Launch a kernel, return (connection_info, kernel_manager).
+        """
+        Launch a kernel, returns a 2-tuple of (connection_info, kernel_manager).
 
-        name will be one of the kernel names produced by find_kernels()
+        **name** will be one of the kernel names produced by find_kernels() and
+        known to this provider.
 
-        This method launches and manages the kernel in a blocking manner.
+        **cwd** (optional) a string that specifies the path to the current directory of the
+        notebook as conveyed by the client.  Its interpretation is provider-specific.
+
+        **launch_params** (optional) a dictionary consisting of the launch parameters used
+        to launch the kernel.  Its interpretation is provider-specific.
+
+        This method launches and manages the kernel in an asynchronous (non-blocking) manner.
         """
         pass
 
     def load_config(self, config=None):
-        """Loads the configuration corresponding to the hosting application.  This method
+        """
+        Loads the configuration corresponding to the hosting application.  This method
         is called during KernelFinder initialization prior to any other methods.
-        Provider is responsible for interpreting the `config` parameter (when present) which will be
-        an instance of Config: https://traitlets.readthedocs.io/en/stable/config.html#the-main-concepts
+        The Kernel provider is responsible for interpreting the `config` parameter
+        (when present).
+
+        **config** (optional) an instance of `Config
+        <https://traitlets.readthedocs.io/en/stable/config.html#the-main-concepts>`_
+        consisting of the hosting application's configurable traitlets.
         """
         pass
 
@@ -77,9 +90,9 @@ class KernelSpecProvider(KernelProviderBase):
 
 
 class IPykernelProvider(KernelProviderBase):
-    """Offers a kernel type using the Python interpreter it's running in.
-
-    This checks if ipykernel is importable first.
+    """
+    Offers a kernel type using the Python interpreter it's running in.
+    This checks if ipykernel is importable first.  If import fails, it doesn't offer a kernel type.
     """
     id = 'pyimport'
 
@@ -117,8 +130,8 @@ class IPykernelProvider(KernelProviderBase):
 
 
 class KernelFinder(object):
-    """Manages a collection of kernel providers to find available kernel types
-
+    """
+    Manages a collection of kernel providers to find available kernel types.
     *providers* should be a list of kernel provider instances.
     """
     def __init__(self, providers):
@@ -135,9 +148,10 @@ class KernelFinder(object):
 
     @classmethod
     def from_entrypoints(cls):
-        """Load all kernel providers advertised by entry points.
+        """
+        Load all kernel providers advertised by entry points.
 
-        Kernel providers should use the "jupyter_client.kernel_providers"
+        Kernel providers should use the "jupyter_kernel_mgmt.kernel_type_providers"
         entry point group.
 
         Returns an instance of KernelFinder.
@@ -154,8 +168,8 @@ class KernelFinder(object):
         return cls(providers)
 
     def find_kernels(self):
-        """Iterate over available kernel types.
-
+        """
+        Iterate over available kernel types.
         Yields 2-tuples of (prefixed_name, attributes)
         """
         for provider in self.providers:
@@ -164,7 +178,8 @@ class KernelFinder(object):
                 yield kernel_type, attributes
 
     async def launch(self, name, cwd=None, launch_params=None):
-        """Launch a kernel of a given kernel type, using asyncio.
+        """
+        Launch a kernel of a given kernel type using asyncio.
         """
         provider_id, kernel_id = name.split('/', 1)
         for provider in self.providers:

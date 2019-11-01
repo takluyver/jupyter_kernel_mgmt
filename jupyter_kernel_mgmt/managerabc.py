@@ -2,19 +2,25 @@ from abc import ABCMeta, abstractmethod
 import asyncio
 import six
 
+
 class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
+    """
+    Abstract base class from which all KernelManager classes are derived.
+    """
 
     kernel_id = None  # Subclass should set kernel_id during initialization
 
     @abstractmethod
     def is_alive(self):
-        """Check whether the kernel is currently alive (e.g. the process exists)
+        """
+        Check whether the kernel is currently alive (e.g. the process exists)
         """
         pass
 
     @abstractmethod
     def wait(self, timeout):
-        """Wait for the kernel process to exit.
+        """
+        Wait for the kernel process to exit.
 
         If timeout is a number, it is a maximum time in seconds to wait.
         timeout=None means wait indefinitely.
@@ -26,23 +32,27 @@ class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
 
     @abstractmethod
     def signal(self, signum):
-        """Send a signal to the kernel."""
+        """
+        Send a signal to the kernel.
+        """
         pass
 
     @abstractmethod
     def interrupt(self):
-        """Interrupt the kernel by sending it a signal or similar event
+        """
+        Interrupt the kernel by sending it a signal or similar event
 
         Kernels can request to get interrupts as messages rather than signals.
         The manager is *not* expected to handle this.
-        :meth:`.KernelClient2.interrupt` should send an interrupt_request or
+        :meth:`.KernelClient.interrupt` should send an interrupt_request or
         call this method as appropriate.
         """
         pass
 
     @abstractmethod
     def kill(self):
-        """Forcibly terminate the kernel.
+        """
+        Forcibly terminate the kernel.
 
         This method may be used to dispose of a kernel that won't shut down.
         Working kernels should usually be shut down by sending shutdown_request
@@ -51,7 +61,9 @@ class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
         pass
 
     def cleanup(self):
-        """Clean up any resources, such as files created by the manager."""
+        """
+        Clean up any resources, such as files created by the manager.
+        """
         pass
 
 

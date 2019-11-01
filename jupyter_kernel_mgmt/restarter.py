@@ -48,21 +48,20 @@ class KernelRestarterBase(LoggingConfigurable):
         raise NotImplementedError("Must be implemented in a subclass")
 
     def add_callback(self, f, event):
-        """register a callback to fire on a particular event
+        """
+        Register a callback to fire on a particular event.
 
         Possible values for event:
-
           'died': the monitored kernel has died
-          'restarted': a restart has been attempted (this does not necessarily
-                       mean that the new kernel is usable).
-          'failed': *restart_limit* attempts have failed in quick succession,
-                    and the restarter is giving up.
 
+          'restarted': a restart has been attempted (this does not necessarily mean that the new kernel is usable).
+
+          'failed': *restart_limit* attempts have failed in quick succession, and the restarter is giving up.
         """
         self.callbacks[event].append(f)
 
     def remove_callback(self, f, event):
-        """unregister a callback from a particular event
+        """Unregister a callback from a particular event
 
         Possible values for *event* are the same as in :meth:`add_callback`.
         """
