@@ -1,8 +1,9 @@
 from abc import ABCMeta, abstractmethod
+import asyncio
 import entrypoints
 import logging
 import six
-
+from tornado.concurrent import Future
 from traitlets.config import Application
 try:
     from json import JSONDecodeError
@@ -12,6 +13,7 @@ except ImportError:
 
 from .kernelspec import KernelSpecManager, KernelSpec
 from .subproc import SubprocessKernelLauncher
+from .util import run_sync
 
 log = logging.getLogger(__name__)
 
@@ -20,7 +22,7 @@ class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
     id = None  # Should be a short string identifying the provider class.
 
     @abstractmethod
-    def find_kernels(self):
+    async def find_kernels(self):
         """Return an iterator of (kernel_name, kernel_info_dict) tuples."""
         pass
 
@@ -65,6 +67,7 @@ class KernelSpecProvider(KernelProviderBase):
     def __init__(self, search_path=None):
         self.ksm = KernelSpecManager(kernel_dirs=search_path, kernel_file=self.kernel_file)
 
+    @asyncio.coroutine
     def find_kernels(self):
         for name, resdir in self.ksm.find_kernel_specs().items():
             try:
@@ -108,6 +111,7 @@ class IPykernelProvider(KernelProviderBase):
                 'resource_dir': RESOURCES,
             }
 
+    @asyncio.coroutine
     def find_kernels(self):
         info = self._check_for_kernel()
 
@@ -165,6 +169,7 @@ class KernelFinder(object):
 
         return cls(providers)
 
+    @asyncio.coroutine
     def find_kernels(self):
         """
         Iterate over available kernel types.
@@ -189,7 +194,8 @@ class KernelFinder(object):
 
 def main():
     kf = KernelFinder.from_entrypoints()
-    for type_id, info in kf.find_kernels():
+    found_kernels = run_sync(kf.find_kernels())
+    for type_id, info in found_kernels:
         print(type_id)
 
 
