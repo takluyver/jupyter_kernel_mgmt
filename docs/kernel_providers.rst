@@ -51,6 +51,7 @@ For example, imagine we want to tell Jupyter about kernels for a new language
 called *oblong*::
 
     # oblong_provider.py
+    import asyncio
     from jupyter_kernel_mgmt.discovery import KernelProviderBase
     from jupyter_kernel_mgmt import KernelManager
     from shutil import which
@@ -58,6 +59,7 @@ called *oblong*::
     class OblongKernelProvider(KernelProviderBase):
         id = 'oblong'
 
+        @asyncio.coroutine
         def find_kernels(self):
             if not which('oblong-kernel'):
                 return  # Check it's available
@@ -75,15 +77,15 @@ called *oblong*::
                 'argv': ['oblong-kernel'],
             }
 
-        def launch(self, name, cwd=None, launch_params=None):
+        async def launch(self, name, cwd=None, launch_params=None):
             if name == 'standard':
-                return my_launch_method(cwd=cwd, launch_params=launch_params,
-                                        kernel_cmd=['oblong-kernel'],
-                                        extra_env={'ROUNDED': '0'})
+                return await my_launch_method(cwd=cwd, launch_params=launch_params,
+                                             kernel_cmd=['oblong-kernel'],
+                                             extra_env={'ROUNDED': '0'})
             elif name == 'rounded':
-                return my_launch_method(cwd=cwd, launch_params=launch_params,
-                                        kernel_cmd=['oblong-kernel'],
-                                        extra_env={'ROUNDED': '1'})
+                return await my_launch_method(cwd=cwd, launch_params=launch_params,
+                                             kernel_cmd=['oblong-kernel'],
+                                             extra_env={'ROUNDED': '1'})
             else:
                 raise ValueError("Unknown kernel %s" % name)
 
@@ -121,9 +123,17 @@ above).
     # ...
 
     ## Start a kernel by name
-    connect_info, manager = kf.launch('oblong/standard')
+    connect_info, manager = await kf.launch('oblong/standard')
 
-    # TODO - Finish example with IOLoopKernelClient, etc.
+    client = IOLoopKernelClient(connect_info, manager=manager)
+    try:
+        await asyncio.wait_for(client.wait_for_ready(), timeout=startup_timeout)
+    except RuntimeError:
+        await client.shutdown_or_terminate()
+        await client.close()
+        await manager.kill()
+
+    # Use `manager` for lifecycle management, `client` for communication
 
 Included kernel providers
 =========================

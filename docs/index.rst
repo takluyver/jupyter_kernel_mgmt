@@ -4,7 +4,7 @@ Jupyter Kernel Management |version|
 This package provides the Python API for starting, managing and communicating with
 Jupyter kernels.
 For information on messaging with Jupyter kernels, please
-refer to the `Jupyter Protocol documentation (FIXME) <https://jupyter-client.readthedocs.io/en/latest/index.html>`_.
+refer to the `Jupyter Protocol documentation <https://jupyter-protocol.readthedocs.io/en/latest/index.html>`_.
 
 .. note::
    This is a new interface under development, and may still change.
