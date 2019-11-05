@@ -10,13 +10,12 @@ import re
 import six
 import socket
 import stat
-from subprocess import PIPE, Popen
+from subprocess import PIPE
 import sys
 from traitlets.log import get_logger as get_app_logger
 import warnings
 
 from ipython_genutils.encoding import getdefaultencoding
-from ipython_genutils.py3compat import cast_bytes_py2
 from jupyter_core.paths import jupyter_runtime_dir, secure_write
 from jupyter_core.utils import ensure_dir_exists
 from ..localinterfaces import localhost, is_local_ip, local_ips
@@ -204,12 +203,9 @@ class SubprocessKernelLauncher:
         independent = False
 
         if sys.platform == 'win32':
-            # Popen on Python 2 on Windows cannot handle unicode args or cwd
-            encoding = getdefaultencoding(prefer_stream=False)
-            kwargs['args'] = [cast_bytes_py2(c, encoding) for c in cmd]
+            kwargs['args'] = cmd
             if self.cwd:
-                kwargs['cwd'] = cast_bytes_py2(self.cwd,
-                                        sys.getfilesystemencoding() or 'ascii')
+                kwargs['cwd'] = self.cwd
 
             try:
                 # noinspection PyUnresolvedReferences
@@ -237,10 +233,7 @@ class SubprocessKernelLauncher:
             # because we want to interrupt the whole process group.
             # We don't use setpgrp, which is known to cause problems for kernels starting
             # certain interactive subprocesses, such as bash -i.
-            if six.PY3:
-                kwargs['start_new_session'] = True
-            else:
-                kwargs['preexec_fn'] = lambda: os.setsid()
+            kwargs['start_new_session'] = True
             if not independent:
                 env['JPY_PARENT_PID'] = str(os.getpid())
 
