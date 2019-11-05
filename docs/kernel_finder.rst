@@ -1,7 +1,7 @@
 .. _kernel_finder:
 
 ================
-Kernel Discovery
+Kernel Finder
 ================
 
 A primary purpose of the Jupyter Kernel management package is to provide

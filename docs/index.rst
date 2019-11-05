@@ -12,7 +12,6 @@ refer to the `Jupyter Protocol documentation <https://jupyter-protocol.readthedo
    See the `jupyter_client <https://pexpect.readthedocs.io/en/latest/>`_ docs for the established way of
    discovering and managing kernels.
 
-
 .. toctree::
    :maxdepth: 2
    :caption: Application Developers
@@ -21,6 +20,8 @@ refer to the `Jupyter Protocol documentation <https://jupyter-protocol.readthedo
    kernel_manager
    kernel_client
    kernel_restarter
+   standalone
+   server
 
 .. toctree::
    :maxdepth: 2
@@ -47,4 +48,3 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-
