@@ -85,7 +85,7 @@ class ManagerClient(KernelManagerABC):
 
         Kernels can request to get interrupts as messages rather than signals.
         The manager is *not* expected to handle this.
-        :meth:`.KernelClient2.interrupt` should send an interrupt_request or
+        :meth:`.KernelClient.interrupt` should send an interrupt_request or
         call this method as appropriate.
         """
         msg = Message.from_type('interrupt_request', {})
@@ -110,7 +110,7 @@ class KernelClient(object):
     """Communicates with a single kernel on any host via zmq channels.
 
     The messages that can be sent are exposed as methods of the
-    client (KernelClient2.execute, complete, history, etc.). These methods only
+    client (KernelClient.execute, complete, history, etc.). These methods only
     send the message, they don't wait for a reply. To get results, use e.g.
     :meth:`get_shell_msg` to fetch messages from the shell channel.
     """

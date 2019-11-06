@@ -565,7 +565,7 @@ class BlockingKernelClient:
 
 
 class ClientInThread(Thread):
-    """Run an IOLoopKernelClient2 in a separate thread.
+    """Run an IOLoopKernelClient in a separate thread.
 
     The main client methods (execute, complete, etc.) all pass their arguments
     to the ioloop thread, which sends the messages. Handlers for received

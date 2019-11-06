@@ -22,7 +22,8 @@ class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
     id = None  # Should be a short string identifying the provider class.
 
     @abstractmethod
-    async def find_kernels(self):
+    @asyncio.coroutine
+    def find_kernels(self):
         """Return an iterator of (kernel_name, kernel_info_dict) tuples."""
         pass
 
@@ -192,12 +193,12 @@ class KernelFinder(object):
                        format(provider_id=provider_id, name=name))
 
 
-def main():
+async def find_kernels_from_entrypoints():
     kf = KernelFinder.from_entrypoints()
-    found_kernels = run_sync(kf.find_kernels())
+    found_kernels = kf.find_kernels()
     for type_id, info in found_kernels:
         print(type_id)
 
 
 if __name__ == '__main__':
-    main()
+    run_sync(find_kernels_from_entrypoints())

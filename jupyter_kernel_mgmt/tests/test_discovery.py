@@ -5,10 +5,13 @@
 
 import asyncio
 import logging
+import os
 import pytest
 import sys
 
 from os.path import join as pjoin
+from subprocess import Popen, PIPE, STDOUT
+
 from jupyter_kernel_mgmt import discovery, kernelspec
 from jupyter_kernel_mgmt.managerabc import KernelManagerABC
 from jupyter_kernel_mgmt.subproc.manager import KernelManager
@@ -272,3 +275,14 @@ async def test_load_config():
 
     assert count == 1
     assert found_argv == ['xxx', 'yyy']
+
+
+async def test_discovery_main(setup_test):
+    p = Popen(
+        [sys.executable, '-m', 'jupyter_kernel_mgmt.discovery'],
+        stdout=PIPE, stderr=STDOUT,
+        #env=os.environ,
+    )
+    out, err = p.communicate()
+    assert err is None
+    assert b'spec/sample' in out
