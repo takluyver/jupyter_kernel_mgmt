@@ -135,6 +135,8 @@ above).
 
     # Use `manager` for lifecycle management, `client` for communication
 
+.. _included_kernel_providers:
+
 Included kernel providers
 =========================
 
