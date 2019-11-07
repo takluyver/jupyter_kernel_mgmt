@@ -12,12 +12,12 @@ On the Jupyter Server side, WEB handlers receive the javascript requests and are
 
 The MainKernelSpecHandler in `services/kernelsspecs/handlers` is reponsible to find the available Kernel Specs.
 
-The other Handlers located in `services/kernels/handlers` are reponsible to launch and pass the message the the ZeroMQ channels:
+The other Handlers located in `services/kernels/handlers` are reponsible to launch and pass the message to the ZeroMQ channels:
 
-- KernelHandler - accessible on URL /api/kernels
-- MainKernelHandler - accessible on URL /api/kernels/kernel_id_regex
-- KernelActionHandler - accessible on URL /api/kernels/kernel_id_regex/kernel_action_regex
-- ZMQChannelsHandler - accessible on URL /api/kernels/kernel_id_regex/channels
+- KernelHandler - accessible on endpoint /api/kernels
+- MainKernelHandler - accessible on endpoint /api/kernels/<kernel_id>
+- KernelActionHandler - accessible on endpoint /api/kernels/<kernel_id>/{interrupt,restart}
+- ZMQChannelsHandler - accessible on endpoint /api/kernels/<kernel_id>/channels
 
 Jupyter Server runs with a single `ServerApp` that initializes each of the handlers with services related to the Kernels:
 
@@ -31,7 +31,7 @@ The MappingKernelManager instance has a ``KernelFinder`` field.
 The kernel_manager we are referring to in Jupyter Server should not be confused with the kernel_manager of the Kernel Manager it self.
 To avoid confusion, we will name the Servers's one `mapping_kernel_manager` in the next sections.
 
-Notably, the ZMQChannelsHandler has access to a kernel_client field (the kernel_client is created with `mapping_kernel_manager.get_kernel(self.kernel_id).client`).
+Notably, the ZMQChannelsHandler has access to the kernel's client interface via its kernel_client property.
 
 In order be found by a kernel_finder, Kernel Providers need to register them selves via the entrypoint mechanism.
 
