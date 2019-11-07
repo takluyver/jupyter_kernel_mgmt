@@ -1,4 +1,4 @@
-name: jup_kernel_mgmt
+name: jk_mgmt_docs
 channels:
   - conda-forge
 dependencies:
