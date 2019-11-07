@@ -33,7 +33,7 @@ To avoid confusion, we will name the Servers's one `mapping_kernel_manager` in t
 
 Notably, the ZMQChannelsHandler has access to the kernel's client interface via its kernel_client property.
 
-In order be found by a kernel_finder, Kernel Providers need to register them selves via the entrypoint mechanism.
+In order to be found by a kernel_finder, Kernel Providers need to register them selves via the entrypoint mechanism.
 
 The :ref:`included kernel providers <included_kernel_providers>`, :class:`KernelSpecProvider <jupyter_kernel_mgmt.discovery.KernelSpecProvider>` and :class:`IPykernelProvider <jupyter_kernel_mgmt.discovery.IPykernelProvider>`, register by default their entrypoints.
 
