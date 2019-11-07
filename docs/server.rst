@@ -10,28 +10,32 @@ This page describes the way `Jupyter Server <https://github.com/jupyter/jupyter_
 
 On the Jupyter Server side, WEB handlers receive the javascript requests and are responsible for the communication with the Kernel Manager and Providers.
 
-The MainKernelSpecHandler in `services/kernelsspecs/handlers` manages the findings of the Kernel Specs.
+The MainKernelSpecHandler in `services/kernelsspecs/handlers` is reponsible to find the available Kernel Specs.
 
-The other Handlers located in `services/kernels/handlers` manage the launch :
+The other Handlers located in `services/kernels/handlers` are reponsible to launch and pass the message the the ZeroMQ channels:
 
-- MainKernelHandler
-- KernelHandler
-- KernelActionHandler
-- ZMQChannelsHandler
+- KernelHandler - accessible on URL /api/kernels
+- MainKernelHandler - accessible on URL /api/kernels/kernel_id_regex
+- KernelActionHandler - accessible on URL /api/kernels/kernel_id_regex/kernel_action_regex
+- ZMQChannelsHandler - accessible on URL /api/kernels/kernel_id_regex/channels
 
-Jupyter Server runs with a single `ServerApp` that initializes each of the handlers with services, specifically for the Kernels:
+Jupyter Server runs with a single `ServerApp` that initializes each of the handlers with services related to the Kernels:
 
 - A ``kernel_manager`` - the default manager is `MappingKernelManager` provided by `jupyter_server`.
-- A ``kernel_finder`` - which is imported from the `jupyter_kernel_mgmt` library.
-- A ``session_manager`` - which a uses a kernel_manager ``MappingKernelManager``.
+- A ``kernel_finder`` - is imported from the `jupyter_kernel_mgmt` library.
+- A ``session_manager`` - uses a kernel_manager `MappingKernelManager`.
 
-All instances of MappingKernelManager have a ``KernelFinder`` field.
+A single instance of MappingKernelManager is shared across all other objects (singleton pattern).
+The MappingKernelManager instance has a ``KernelFinder`` field.
 
-Notably, the ZMQChannelsHandler has access to a kernel_client field (the kernel_client is created with `kernel_manager.get_kernel(self.kernel_id).client`).
+The kernel_manager we are referring to in Jupyter Server should not be confused with the kernel_manager of the Kernel Manager it self.
+To avoid confusion, we will name the Servers's one `mapping_kernel_manager` in the next sections.
+
+Notably, the ZMQChannelsHandler has access to a kernel_client field (the kernel_client is created with `mapping_kernel_manager.get_kernel(self.kernel_id).client`).
 
 In order be found by a kernel_finder, Kernel Providers need to register them selves via the entrypoint mechanism.
 
-The :ref:`included kernel providers <included_kernel_providers>` (:class:`KernelSpecProvider <jupyter_kernel_mgmt.discovery.KernelSpecProvider>` and :class:`IPykernelProvider <jupyter_kernel_mgmt.discovery.IPykernelProvider>`) register by default their entrypoints.
+The :ref:`included kernel providers <included_kernel_providers>`, :class:`KernelSpecProvider <jupyter_kernel_mgmt.discovery.KernelSpecProvider>` and :class:`IPykernelProvider <jupyter_kernel_mgmt.discovery.IPykernelProvider>`, register by default their entrypoints.
 
 .. code-block:: python
 
