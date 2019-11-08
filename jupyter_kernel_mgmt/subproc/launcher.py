@@ -7,23 +7,32 @@ import errno
 import json
 import os
 import re
-import six
 import socket
 import stat
-from subprocess import PIPE
+from subprocess import PIPE, Popen
 import sys
 from traitlets.log import get_logger as get_app_logger
 import warnings
 
-from ipython_genutils.encoding import getdefaultencoding
 from jupyter_core.paths import jupyter_runtime_dir, secure_write
 from jupyter_core.utils import ensure_dir_exists
 from ..localinterfaces import localhost, is_local_ip, local_ips
-from .manager import KernelManager
+from .manager import KernelManager, use_sync_subprocess
 from ..util import run_sync
 
-port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port',
-              'hb_port']
+port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port', 'hb_port']
+
+if sys.platform == 'win32':
+    # Windows specific event-loop policy.  Although WindowsSelectorEventLoop is the current
+    # default event loop priot to Python 3.8, WindowsProactorEventLoop becomes the default
+    # in Python 3.8.  However, using WindowsProactorEventLoop fails during creation of
+    # IOLoopKernelClient because it doesn't implement add_reader(), while using
+    # WindowsSelectorEventLoop fails during asyncio.create_subprocess_exec() because it
+    # doesn't implement _make_subprocess_transport().  As a result, we need to force the use of
+    # the WindowsSelectorEventLoop, and essentially make process management synchronous on Windows
+    # (via use_sync_subprocess). (sigh)
+    # See https://github.com/takluyver/jupyter_kernel_mgmt/issues/31
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 class SubprocessKernelLauncher:
@@ -76,7 +85,11 @@ class SubprocessKernelLauncher:
         # launch the kernel subprocess
         args = kw.pop('args')
         self.log.debug("Starting kernel cmd: %s", args)
-        kernel = await asyncio.create_subprocess_exec(*args, **kw)
+
+        if use_sync_subprocess:
+            kernel = Popen(args, **kw)
+        else:
+            kernel = await asyncio.create_subprocess_exec(*args, **kw)
         kernel.stdin.close()
 
         files_to_cleanup = list(self.files_to_cleanup(conn_file, conn_info))
@@ -325,7 +338,7 @@ def prepare_interrupt_event(env, interrupt_event=None):
 
 
 async def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_params=None):
-    """Start a new kernel, and return its Manager and a blocking client"""
+    """Start a new kernel, and return its Manager and a client"""
     from ..client import IOLoopKernelClient
     cwd = cwd or os.getcwd()
 
@@ -336,7 +349,7 @@ async def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_para
         await asyncio.wait_for(kc.wait_for_ready(), timeout=startup_timeout)
     except RuntimeError:
         await kc.shutdown_or_terminate()
-        await kc.close()
+        kc.close()
         raise
 
     return km, kc

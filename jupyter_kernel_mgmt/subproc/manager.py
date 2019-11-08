@@ -19,6 +19,13 @@ from traitlets.log import get_logger as get_app_logger
 
 from ..managerabc import KernelManagerABC
 
+# Abstract the decision on whether to use a sync popen so we
+# can easily enable it on non-windows systems.  This value should
+# remain True for win32 until asyncio.create_subprocess_exec works.
+if sys.platform == 'win32':
+    use_sync_subprocess = True
+else:
+    use_sync_subprocess = False
 
 class KernelManager(KernelManagerABC):
     """Manages a single kernel in a subprocess on this host.
@@ -40,11 +47,20 @@ class KernelManager(KernelManagerABC):
         self.win_interrupt_evt = win_interrupt_evt
         self.log = get_app_logger()
         self.kernel_id = str(uuid.uuid4())
-        self._exit_future = asyncio.ensure_future(self.kernel.wait())
+        if not use_sync_subprocess:
+            self._exit_future = asyncio.ensure_future(self.kernel.wait())
 
     async def wait(self):
         """Wait for kernel to terminate"""
-        await self.kernel.wait()
+        if use_sync_subprocess:
+            sync_wait_timeout = 2
+            try:
+                self.kernel.wait(sync_wait_timeout)
+            except subprocess.TimeoutExpired:
+                self.log.warning("Timeout expired waiting for process '{}' to terminate.  Continuing...".
+                                 format(self.kernel.pid))
+        else:
+            await self.kernel.wait()
 
     async def cleanup(self):
         """Clean up resources when the kernel is shut down"""
@@ -76,7 +92,7 @@ class KernelManager(KernelManagerABC):
                     raise
 
         # Wait until the kernel terminates.
-        await self.kernel.wait()
+        await self.wait()
 
     async def interrupt(self):
         """Interrupts the kernel by sending it a signal.
@@ -113,5 +129,12 @@ class KernelManager(KernelManagerABC):
 
     async def is_alive(self):
         """Is the kernel process still running?"""
-        return not self._exit_future.done()
+        if use_sync_subprocess:
+            is_alive = False  # assume the kernel is dead
+            if self.kernel is not None:
+                if self.kernel.poll() is None:
+                    is_alive = True
 
+            return is_alive
+        else:
+            return not self._exit_future.done()
