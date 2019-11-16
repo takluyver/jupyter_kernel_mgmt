@@ -22,7 +22,7 @@ from ..util import run_sync
 
 port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port', 'hb_port']
 
-if sys.platform == 'win32':
+if sys.platform.startswith("win") and sys.version_info >= (3, 8):
     # Windows specific event-loop policy.  Although WindowsSelectorEventLoop is the current
     # default event loop priot to Python 3.8, WindowsProactorEventLoop becomes the default
     # in Python 3.8.  However, using WindowsProactorEventLoop fails during creation of
@@ -32,7 +32,20 @@ if sys.platform == 'win32':
     # the WindowsSelectorEventLoop, and essentially make process management synchronous on Windows
     # (via use_sync_subprocess). (sigh)
     # See https://github.com/takluyver/jupyter_kernel_mgmt/issues/31
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # The following approach to this is from https://github.com/jupyter/notebook/pull/5047 by @minrk
+    try:
+        from asyncio import (
+            WindowsProactorEventLoopPolicy,
+            WindowsSelectorEventLoopPolicy,
+        )
+    except ImportError:
+        pass
+        # not affected
+    else:
+        if type(asyncio.get_event_loop_policy()) is WindowsProactorEventLoopPolicy:
+            # WindowsProactorEventLoopPolicy is not compatible with tornado 6
+            # fallback to the pre-3.8 default of Selector
+            asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 
 
 class SubprocessKernelLauncher:
