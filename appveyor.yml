@@ -3,8 +3,12 @@ matrix:
 
 environment:
   matrix:
-  - CONDA_PY: 37
-    CONDA_INSTALL_LOCN: '"C:\\Miniconda36-x64"'
+    - CONDA_PY: 38
+      CONDA_PY_SPEC: ">=3.8,<3.9.0a0"
+      CONDA_INSTALL_LOCN: "C:\\Miniconda36-x64"
+    - CONDA_PY: 37
+      CONDA_PY_SPEC: ">=3.7,<3.8.0a0"
+      CONDA_INSTALL_LOCN: "C:\\Miniconda36-x64"
 
 platform:
   - x64
@@ -15,7 +19,7 @@ install:
   - cmd: call %CONDA_INSTALL_LOCN%\\Scripts\\activate.bat
   - cmd: conda config --set show_channel_urls true
   - cmd: conda config --add channels conda-forge
-  - cmd: conda install -y python=3.7 pyzmq tornado nbformat nbconvert ipykernel pip 
+  - cmd: conda install -y python=%CONDA_PY_SPEC% pyzmq tornado nbformat nbconvert ipykernel pip
   - cmd: pip install .[test]
   - cmd: pip install --upgrade jupyter_core  # latest core not on conda yet
 

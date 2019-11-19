@@ -251,6 +251,16 @@ class SubprocessKernelLauncher:
                                          DUPLICATE_SAME_ACCESS)
                 env['JPY_PARENT_PID'] = str(int(handle))
 
+            # Prevent creating new console window on pythonw
+            if redirect_out:
+                kwargs['creationflags'] = kwargs.setdefault('creationflags', 0) | 0x08000000 # CREATE_NO_WINDOW
+
+            # Avoid closing the above parent and interrupt handles.
+            # close_fds is True by default on Python >=3.7
+            # or when no stream is captured on Python <3.7
+            # (we always capture stdin, so this is already False by default on <3.7)
+            kwargs['close_fds'] = False
+
         else:
             kwargs['args'] = cmd
             kwargs['cwd'] = self.cwd
