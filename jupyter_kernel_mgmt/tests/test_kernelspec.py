@@ -15,11 +15,6 @@ import sys
 
 import pytest
 
-if str is bytes: # py2
-    StringIO = io.BytesIO
-else:
-    StringIO = io.StringIO
-
 from ipython_genutils.tempdir import TemporaryDirectory
 from jupyter_kernel_mgmt import kernelspec
 from jupyter_core import paths
@@ -117,7 +112,7 @@ def test_install_kernel_spec(ksm, installable_kernel):
 
 
 def test_install_kernel_spec_prefix(tmpdir, ksm, installable_kernel):
-    capture = StringIO()
+    capture = io.StringIO()
     handler = StreamHandler(capture)
     ksm.log.addHandler(handler)
     ksm.install_kernel_spec(installable_kernel,
@@ -133,7 +128,7 @@ def test_install_kernel_spec_prefix(tmpdir, ksm, installable_kernel):
     assert 'tstinstalled' in ksm.find_kernel_specs()
 
     # Run it again, no warning this time because we've added it to the path
-    capture = StringIO()
+    capture = io.StringIO()
     handler = StreamHandler(capture)
     ksm.log.addHandler(handler)
     ksm.install_kernel_spec(installable_kernel,

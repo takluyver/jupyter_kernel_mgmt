@@ -1,13 +1,13 @@
-matrix:
-  fast_finish: true
-
 environment:
   matrix:
-    - CONDA_PY: 38
-      CONDA_PY_SPEC: ">=3.8,<3.9.0a0"
+    - CONDA_PY: 36
+      CONDA_PY_SPEC: 3.6
       CONDA_INSTALL_LOCN: "C:\\Miniconda36-x64"
     - CONDA_PY: 37
-      CONDA_PY_SPEC: ">=3.7,<3.8.0a0"
+      CONDA_PY_SPEC: 3.7
+      CONDA_INSTALL_LOCN: "C:\\Miniconda36-x64"
+    - CONDA_PY: 38
+      CONDA_PY_SPEC: 3.8
       CONDA_INSTALL_LOCN: "C:\\Miniconda36-x64"
 
 platform:
@@ -17,11 +17,17 @@ build: off
 
 install:
   - cmd: call %CONDA_INSTALL_LOCN%\\Scripts\\activate.bat
+  - cmd: set CONDA_PY=%CONDA_PY%
+  - cmd: set CONDA_PY_SPEC=%CONDA_PY_SPEC%
   - cmd: conda config --set show_channel_urls true
   - cmd: conda config --add channels conda-forge
-  - cmd: conda install -y python=%CONDA_PY_SPEC% pyzmq tornado nbformat nbconvert ipykernel pip
+  - cmd: conda update -y -q conda
+  - cmd: conda info -a
+  - cmd: conda create -y -q -n test-env-%CONDA_PY% python=%CONDA_PY_SPEC% pyzmq tornado nbformat nbconvert ipykernel pip
+  - cmd: conda activate test-env-%CONDA_PY%
   - cmd: pip install .[test]
-  - cmd: pip install --upgrade jupyter_core  # latest core not on conda yet
+# FIXME: Use minrk's patch for python 3.8, windows issues.  Remove once released.
+  - IF %CONDA_PY% == 38 pip install --upgrade git+https://github.com/minrk/ipykernel.git@py38-win
 
 test_script:
   - pytest -v jupyter_kernel_mgmt/tests

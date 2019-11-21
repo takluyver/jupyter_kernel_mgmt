@@ -16,16 +16,11 @@ import uuid
 log = logging.getLogger(__name__)
 
 from traitlets.log import get_logger as get_app_logger
-
 from ..managerabc import KernelManagerABC
 
-# Abstract the decision on whether to use a sync popen so we
-# can easily enable it on non-windows systems.  This value should
-# remain True for win32 until asyncio.create_subprocess_exec works.
-if sys.platform == 'win32':
-    use_sync_subprocess = True
-else:
-    use_sync_subprocess = False
+# Allow alteration via env since some kernels may require longer shutdown times.
+max_wait_time = float(os.getenv("JKM_MAX_WAIT_TIME", 5.0))
+
 
 class KernelManager(KernelManagerABC):
     """Manages a single kernel in a subprocess on this host.
@@ -33,8 +28,9 @@ class KernelManager(KernelManagerABC):
     Parameters
     ----------
 
-    popen : subprocess.Popen
-      The process with the started kernel
+    popen : subprocess.Popen or asyncio.subprocess.Process
+      The process with the started kernel.  Windows will use
+      Popen (by default), while non-Windows will will asyncio's Process
     files_to_cleanup : list of paths, optional
       Files to be cleaned up after terminating this kernel.
     win_interrupt_evt :
@@ -47,20 +43,27 @@ class KernelManager(KernelManagerABC):
         self.win_interrupt_evt = win_interrupt_evt
         self.log = get_app_logger()
         self.kernel_id = str(uuid.uuid4())
-        if not use_sync_subprocess:
+        # Capture subprocess kind from instance information
+        self.async_subprocess = isinstance(popen, asyncio.subprocess.Process)
+        if self.async_subprocess:
             self._exit_future = asyncio.ensure_future(self.kernel.wait())
 
     async def wait(self):
         """Wait for kernel to terminate"""
-        if use_sync_subprocess:
-            sync_wait_timeout = 2
-            try:
-                self.kernel.wait(sync_wait_timeout)
-            except subprocess.TimeoutExpired:
-                self.log.warning("Timeout expired waiting for process '{}' to terminate.  Continuing...".
-                                 format(self.kernel.pid))
-        else:
+        if self.async_subprocess:
             await self.kernel.wait()
+        else:
+            # Use busy loop at 100ms intervals, polling until the process is
+            # not alive.  If we find the process is no longer alive, complete
+            # its cleanup via the blocking wait().  Callers are responsible for
+            # issuing calls to wait() using a timeout (see kill()).
+            while await self.is_alive():
+                await asyncio.sleep(0.1)
+
+            # Process is no longer alive, wait and clear
+            if self.kernel is not None:
+                self.kernel.wait()
+                self.kernel = None
 
     async def cleanup(self):
         """Clean up resources when the kernel is shut down"""
@@ -92,7 +95,13 @@ class KernelManager(KernelManagerABC):
                     raise
 
         # Wait until the kernel terminates.
-        await self.wait()
+        try:
+            await asyncio.wait_for(self.wait(), timeout=max_wait_time)
+        except asyncio.TimeoutError:
+            # Wait timed out, just log warning but continue - not much more we can do.
+            self.log.warning("Wait for final termination of kernel '{id}' timed out - continuing...".
+                             format(id=self.kernel_id))
+            pass
 
     async def interrupt(self):
         """Interrupts the kernel by sending it a signal.
@@ -129,12 +138,13 @@ class KernelManager(KernelManagerABC):
 
     async def is_alive(self):
         """Is the kernel process still running?"""
-        if use_sync_subprocess:
+        if self.async_subprocess:
+            return not self._exit_future.done()
+        else:
             is_alive = False  # assume the kernel is dead
             if self.kernel is not None:
                 if self.kernel.poll() is None:
                     is_alive = True
 
             return is_alive
-        else:
-            return not self._exit_future.done()
+

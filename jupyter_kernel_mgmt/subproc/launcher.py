@@ -17,35 +17,20 @@ import warnings
 from jupyter_core.paths import jupyter_runtime_dir, secure_write
 from jupyter_core.utils import ensure_dir_exists
 from ..localinterfaces import localhost, is_local_ip, local_ips
-from .manager import KernelManager, use_sync_subprocess
+from .manager import KernelManager
 from ..util import run_sync
 
 port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port', 'hb_port']
 
-if sys.platform.startswith("win") and sys.version_info >= (3, 8):
-    # Windows specific event-loop policy.  Although WindowsSelectorEventLoop is the current
-    # default event loop priot to Python 3.8, WindowsProactorEventLoop becomes the default
-    # in Python 3.8.  However, using WindowsProactorEventLoop fails during creation of
-    # IOLoopKernelClient because it doesn't implement add_reader(), while using
-    # WindowsSelectorEventLoop fails during asyncio.create_subprocess_exec() because it
-    # doesn't implement _make_subprocess_transport().  As a result, we need to force the use of
-    # the WindowsSelectorEventLoop, and essentially make process management synchronous on Windows
-    # (via use_sync_subprocess). (sigh)
-    # See https://github.com/takluyver/jupyter_kernel_mgmt/issues/31
-    # The following approach to this is from https://github.com/jupyter/notebook/pull/5047 by @minrk
-    try:
-        from asyncio import (
-            WindowsProactorEventLoopPolicy,
-            WindowsSelectorEventLoopPolicy,
-        )
-    except ImportError:
-        pass
-        # not affected
-    else:
-        if type(asyncio.get_event_loop_policy()) is WindowsProactorEventLoopPolicy:
-            # WindowsProactorEventLoopPolicy is not compatible with tornado 6
-            # fallback to the pre-3.8 default of Selector
-            asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())
+# Abstract the decision on whether to use a sync popen so we
+# can easily enable it on non-windows systems if necessary.
+# This value should remain True for win32 until
+# asyncio.create_subprocess_exec works (see comment in
+# util.init_asyncio_patch()).
+if sys.platform == 'win32':
+    use_sync_subprocess = True
+else:
+    use_sync_subprocess = False
 
 
 class SubprocessKernelLauncher:
@@ -370,7 +355,7 @@ async def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_para
     kc = IOLoopKernelClient(info, manager=km)
     try:
         await asyncio.wait_for(kc.wait_for_ready(), timeout=startup_timeout)
-    except RuntimeError:
+    except (RuntimeError, asyncio.TimeoutError):
         await kc.shutdown_or_terminate()
         kc.close()
         raise
