@@ -26,8 +26,8 @@ install:
   - cmd: conda create -y -q -n test-env-%CONDA_PY% python=%CONDA_PY_SPEC% pyzmq tornado nbformat nbconvert ipykernel pip
   - cmd: conda activate test-env-%CONDA_PY%
   - cmd: pip install .[test]
-# FIXME: Use minrk's patch for python 3.8, windows issues.  Remove once released.
-  - IF %CONDA_PY% == 38 pip install --upgrade git+https://github.com/minrk/ipykernel.git@py38-win
+# FIXME: Use patch for python 3.8, windows issues (https://github.com/ipython/ipykernel/pull/456) - remove once released
+  - IF %CONDA_PY% == 38 pip install --upgrade git+https://github.com/ipython/ipykernel.git
 
 test_script:
   - pytest -v jupyter_kernel_mgmt/tests

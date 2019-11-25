@@ -30,7 +30,7 @@ class KernelManager(KernelManagerABC):
 
     popen : subprocess.Popen or asyncio.subprocess.Process
       The process with the started kernel.  Windows will use
-      Popen (by default), while non-Windows will will asyncio's Process
+      Popen (by default), while non-Windows will use asyncio's Process.
     files_to_cleanup : list of paths, optional
       Files to be cleaned up after terminating this kernel.
     win_interrupt_evt :
@@ -141,10 +141,4 @@ class KernelManager(KernelManagerABC):
         if self.async_subprocess:
             return not self._exit_future.done()
         else:
-            is_alive = False  # assume the kernel is dead
-            if self.kernel is not None:
-                if self.kernel.poll() is None:
-                    is_alive = True
-
-            return is_alive
-
+            return self.kernel and (self.kernel.poll() is None)
