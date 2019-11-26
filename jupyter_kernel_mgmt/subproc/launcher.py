@@ -7,23 +7,30 @@ import errno
 import json
 import os
 import re
-import six
 import socket
 import stat
-from subprocess import PIPE
+from subprocess import PIPE, Popen
 import sys
 from traitlets.log import get_logger as get_app_logger
 import warnings
 
-from ipython_genutils.encoding import getdefaultencoding
 from jupyter_core.paths import jupyter_runtime_dir, secure_write
 from jupyter_core.utils import ensure_dir_exists
 from ..localinterfaces import localhost, is_local_ip, local_ips
 from .manager import KernelManager
 from ..util import run_sync
 
-port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port',
-              'hb_port']
+port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port', 'hb_port']
+
+# Abstract the decision on whether to use a sync popen so we
+# can easily enable it on non-windows systems if necessary.
+# This value should remain True for win32 until
+# asyncio.create_subprocess_exec works (see comment in
+# util.init_asyncio_patch()).
+if sys.platform == 'win32':
+    use_sync_subprocess = True
+else:
+    use_sync_subprocess = False
 
 
 class SubprocessKernelLauncher:
@@ -76,7 +83,11 @@ class SubprocessKernelLauncher:
         # launch the kernel subprocess
         args = kw.pop('args')
         self.log.debug("Starting kernel cmd: %s", args)
-        kernel = await asyncio.create_subprocess_exec(*args, **kw)
+
+        if use_sync_subprocess:
+            kernel = Popen(args, **kw)
+        else:
+            kernel = await asyncio.create_subprocess_exec(*args, **kw)
         kernel.stdin.close()
 
         files_to_cleanup = list(self.files_to_cleanup(conn_file, conn_info))
@@ -225,6 +236,16 @@ class SubprocessKernelLauncher:
                                          DUPLICATE_SAME_ACCESS)
                 env['JPY_PARENT_PID'] = str(int(handle))
 
+            # Prevent creating new console window on pythonw
+            if redirect_out:
+                kwargs['creationflags'] = kwargs.setdefault('creationflags', 0) | 0x08000000 # CREATE_NO_WINDOW
+
+            # Avoid closing the above parent and interrupt handles.
+            # close_fds is True by default on Python >=3.7
+            # or when no stream is captured on Python <3.7
+            # (we always capture stdin, so this is already False by default on <3.7)
+            kwargs['close_fds'] = False
+
         else:
             kwargs['args'] = cmd
             kwargs['cwd'] = self.cwd
@@ -325,7 +346,7 @@ def prepare_interrupt_event(env, interrupt_event=None):
 
 
 async def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_params=None):
-    """Start a new kernel, and return its Manager and a blocking client"""
+    """Start a new kernel, and return its Manager and a client"""
     from ..client import IOLoopKernelClient
     cwd = cwd or os.getcwd()
 
@@ -334,9 +355,9 @@ async def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_para
     kc = IOLoopKernelClient(info, manager=km)
     try:
         await asyncio.wait_for(kc.wait_for_ready(), timeout=startup_timeout)
-    except RuntimeError:
+    except (RuntimeError, asyncio.TimeoutError):
         await kc.shutdown_or_terminate()
-        await kc.close()
+        kc.close()
         raise
 
     return km, kc

@@ -12,7 +12,7 @@ from jupyter_kernel_mgmt.restarter import KernelRestarterBase
 
 
 @pytest.mark.asyncio
-async def test_reinstantiate():
+async def test_reinstantiate(setup_env):
     # If the kernel fails, a new manager should be instantiated
     kf = discovery.KernelFinder(providers=[DummyKernelProvider()])
     _, manager = await kf.launch('dummy/sample')

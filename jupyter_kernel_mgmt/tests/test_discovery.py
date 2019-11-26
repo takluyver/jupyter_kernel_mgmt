@@ -150,7 +150,7 @@ def setup_test(setup_env):
                           kernel_json=params_json)
 
 
-async def test_ipykernel_provider():
+async def test_ipykernel_provider(setup_test):
     import ipykernel  # Fail clearly if ipykernel not installed
     ikf = discovery.IPykernelProvider()
 
@@ -161,7 +161,7 @@ async def test_ipykernel_provider():
     assert info['argv'][0] == sys.executable
 
 
-async def test_meta_kernel_finder():
+async def test_meta_kernel_finder(setup_test):
     kf = discovery.KernelFinder(providers=[DummyKernelProvider()])
     assert list(kf.find_kernels()) == \
         [('dummy/sample', {'argv': ['dummy_kernel']})]
@@ -258,7 +258,7 @@ async def test_kernel_launch_params(caplog, setup_test):
         await manager.kill()
 
 
-async def test_load_config():
+async def test_load_config(setup_test):
     # create fake application
     app = ProviderApplication()
     app.launch_instance(argv=["--ProviderConfig.my_argv=['xxx','yyy']"])
