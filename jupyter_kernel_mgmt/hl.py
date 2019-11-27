@@ -41,7 +41,7 @@ class run_kernel_async:
         return self.kc
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        self.kc.shutdown_or_terminate()
+        await self.kc.shutdown_or_terminate()
         self.kc.close()
         return False  # Don't suppress exceptions
 
