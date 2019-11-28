@@ -6,7 +6,7 @@
 import pytest
 from jupyter_protocol.messages import Message
 from ..discovery import KernelFinder, IPykernelProvider
-from ..hl import run_kernel_blocking
+from jupyter_kernel_mgmt import run_kernel_blocking
 
 from IPython.utils.capture import capture_output
 

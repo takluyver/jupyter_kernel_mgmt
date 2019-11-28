@@ -8,7 +8,7 @@ import pytest
 from async_generator import yield_, async_generator
 from jupyter_protocol.messages import Message
 from ..discovery import KernelFinder, IPykernelProvider
-from ..hl import run_kernel_async
+from jupyter_kernel_mgmt import run_kernel_async
 
 TIMEOUT = 30
 
