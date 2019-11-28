@@ -276,13 +276,15 @@ class IOLoopKernelClient(KernelClient):
     def shutdown_or_terminate(self, timeout=5.0):
         """Ask the kernel to shut down, and terminate it if it takes too long.
 
-        The kernel will be given up to timeout seconds to shut itself down.
+        The kernel will be given up to timeout seconds to respond to the
+        shutdown message, then the same timeout to terminate.
         """
         if not self.manager:
             raise RuntimeError(
                 "Cannot terminate a kernel without a KernelManager")
         try:
             yield gen.with_timeout(timedelta(seconds=timeout), self.shutdown())
+            yield gen.with_timeout(timedelta(seconds=timeout), self.manager.wait())
         except tornado.util.TimeoutError:
             self.log.debug("Kernel is taking too long to finish, killing")
             yield self.manager.kill()
