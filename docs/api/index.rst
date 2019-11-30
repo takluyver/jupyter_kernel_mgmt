@@ -9,6 +9,7 @@ Kernel Management APIs
    finder
    providers
    launchers
+   hl
    manager
    client
    restarter
