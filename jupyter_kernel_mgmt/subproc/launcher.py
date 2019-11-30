@@ -344,38 +344,3 @@ def prepare_interrupt_event(env, interrupt_event=None):
         env["IPY_INTERRUPT_EVENT"] = env["JPY_INTERRUPT_EVENT"]
         return interrupt_event
 
-
-async def start_new_kernel(kernel_cmd, startup_timeout=60, cwd=None, launch_params=None):
-    """Start a new kernel, and return its Manager and a client"""
-    from ..client import IOLoopKernelClient
-    cwd = cwd or os.getcwd()
-
-    launcher = SubprocessKernelLauncher(kernel_cmd, cwd=cwd, launch_params=launch_params)
-    info, km = await launcher.launch()
-    kc = IOLoopKernelClient(info, manager=km)
-    try:
-        await asyncio.wait_for(kc.wait_for_ready(), timeout=startup_timeout)
-    except (RuntimeError, asyncio.TimeoutError):
-        await kc.shutdown_or_terminate()
-        kc.close()
-        raise
-
-    return km, kc
-
-
-@contextmanager
-def run_kernel(kernel_cmd, **kwargs):
-    """Context manager to create a kernel in a subprocess.
-
-    The kernel is shut down when the context exits.
-
-    Returns
-    -------
-    kernel_client: connected KernelClient instance
-    """
-    km, kc = run_sync(start_new_kernel(kernel_cmd, **kwargs))
-    try:
-        yield kc
-    finally:
-        kc.shutdown_or_terminate()
-        kc.close()

@@ -1,1 +1,1 @@
-from .launcher import SubprocessKernelLauncher, run_kernel
+from .launcher import SubprocessKernelLauncher
