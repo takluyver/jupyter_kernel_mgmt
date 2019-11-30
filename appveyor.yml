@@ -1,0 +1,33 @@
+environment:
+  matrix:
+    - CONDA_PY: 36
+      CONDA_PY_SPEC: 3.6
+      CONDA_INSTALL_LOCN: "C:\\Miniconda36-x64"
+    - CONDA_PY: 37
+      CONDA_PY_SPEC: 3.7
+      CONDA_INSTALL_LOCN: "C:\\Miniconda36-x64"
+    - CONDA_PY: 38
+      CONDA_PY_SPEC: 3.8
+      CONDA_INSTALL_LOCN: "C:\\Miniconda36-x64"
+
+platform:
+  - x64
+
+build: off
+
+install:
+  - cmd: call %CONDA_INSTALL_LOCN%\\Scripts\\activate.bat
+  - cmd: set CONDA_PY=%CONDA_PY%
+  - cmd: set CONDA_PY_SPEC=%CONDA_PY_SPEC%
+  - cmd: conda config --set show_channel_urls true
+  - cmd: conda config --add channels conda-forge
+  - cmd: conda update -y -q conda
+  - cmd: conda info -a
+  - cmd: conda create -y -q -n test-env-%CONDA_PY% python=%CONDA_PY_SPEC% pyzmq tornado nbformat nbconvert ipykernel pip
+  - cmd: conda activate test-env-%CONDA_PY%
+  - cmd: pip install .[test]
+# FIXME: Use patch for python 3.8, windows issues (https://github.com/ipython/ipykernel/pull/456) - remove once released
+  - IF %CONDA_PY% == 38 pip install --upgrade git+https://github.com/ipython/ipykernel.git
+
+test_script:
+  - pytest -v jupyter_kernel_mgmt/tests

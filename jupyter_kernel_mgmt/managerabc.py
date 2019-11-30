@@ -18,12 +18,9 @@ class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
         pass
 
     @abstractmethod
-    async def wait(self, timeout):
+    async def wait(self):
         """
         Wait for the kernel process to exit.
-
-        If timeout is a number, it is a maximum time in seconds to wait.
-        timeout=None means wait indefinitely.
 
         Returns True if the kernel is still alive after waiting, False if it
         exited (like is_alive()).

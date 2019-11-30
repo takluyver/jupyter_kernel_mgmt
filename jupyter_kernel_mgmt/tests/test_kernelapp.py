@@ -19,7 +19,7 @@ WAIT_TIME = 10
 POLL_FREQ = 10
 
 
-def test_kernelapp_lifecycle():
+def test_kernelapp_lifecycle(setup_env):
     # Check that 'jupyter kernel' starts and terminates OK.
     runtime_dir = mkdtemp()
     startup_dir = mkdtemp()
