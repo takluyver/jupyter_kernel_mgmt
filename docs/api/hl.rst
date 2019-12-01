@@ -3,10 +3,21 @@
 High Level API
 ==============
 
-.. automethod:: jupyter_kernel_mgmt.hl.start_kernel_async
+These functions are convenient interfaces to start and interact with Jupyter
+kernels.
 
-.. autoclass:: jupyter_kernel_mgmt.hl.run_kernel_async
+Async interface
+---------------
 
-.. automethod:: jupyter_kernel_mgmt.hl.start_kernel_blocking
+These functions are meant to be called from an asyncio event loop.
 
-.. automethod:: jupyter_kernel_mgmt.hl.run_kernel_blocking
+.. autoclass:: jupyter_kernel_mgmt.run_kernel_async
+
+.. autofunction:: jupyter_kernel_mgmt.start_kernel_async
+
+Blocking interface
+------------------
+
+.. autofunction:: jupyter_kernel_mgmt.run_kernel_blocking
+
+.. autofunction:: jupyter_kernel_mgmt.start_kernel_blocking
