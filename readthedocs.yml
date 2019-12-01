@@ -1,0 +1,7 @@
+name: jupyter-kernel-mgmt
+type: sphinx
+conda:
+    file: docs/environment.yml
+python:
+  version: 3
+  pip_install: true
