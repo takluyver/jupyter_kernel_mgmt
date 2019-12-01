@@ -14,7 +14,9 @@ Changes in Jupyter Kernel Mgmt
 - Give kernel providers opportunity to load configuration
 - Add support for kernel launch parameters
 - Add support for native coroutines (async def) 
-- 
+- Significant documentation updates
+- Fix operations on Windows
+- Rework high-level APIs
 
 0.4.0
 -----
