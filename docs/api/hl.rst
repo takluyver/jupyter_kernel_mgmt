@@ -3,12 +3,10 @@
 High Level API
 ==============
 
-.. currentmodule:: jupyter_kernel_mgmt.hl
+.. automethod:: jupyter_kernel_mgmt.hl.start_kernel_async
 
-.. automethod:: start_kernel_async
+.. autoclass:: jupyter_kernel_mgmt.hl.run_kernel_async
 
-.. autoclass:: run_kernel_async
+.. automethod:: jupyter_kernel_mgmt.hl.start_kernel_blocking
 
-.. automethod:: start_kernel_blocking
-
-.. automethod:: run_kernel_blocking
+.. automethod:: jupyter_kernel_mgmt.hl.run_kernel_blocking

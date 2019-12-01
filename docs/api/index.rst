@@ -6,10 +6,10 @@ Kernel Management APIs
 .. toctree::
    :maxdepth: 2
 
+   hl
    finder
    providers
    launchers
-   hl
    manager
    client
    restarter

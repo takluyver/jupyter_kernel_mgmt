@@ -16,6 +16,7 @@ refer to the `Jupyter Protocol documentation <https://jupyter-protocol.readthedo
    :maxdepth: 2
    :caption: Application Developers
 
+   kernel_hl_api
    kernel_finder
    kernel_manager
    kernel_client
