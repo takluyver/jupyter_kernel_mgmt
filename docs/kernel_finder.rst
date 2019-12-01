@@ -4,18 +4,20 @@
 Kernel Finder
 ================
 
-A primary purpose of the Jupyter Kernel management package is to provide
-a means of discovering kernels that are available for use.  This is accomplished
-using the :class:`KernelFinder <jupyter_kernel_mgmt.discovery.KernelFinder>` class.
+The ``jupyter_kernel_mgmt`` package provides a means of discovering kernel types
+that are available for use. This is accomplished using the
+:class:`KernelFinder <jupyter_kernel_mgmt.discovery.KernelFinder>` class.
 
-:class:`KernelFinder <jupyter_kernel_mgmt.discovery.KernelFinder>` instances are created in one of two ways.
+:class:`KernelFinder <jupyter_kernel_mgmt.discovery.KernelFinder>` instances are
+created in one of two ways.
 
 1. The most common way is to call KernelFinder's class method
-:meth:`.KernelFinder.from_entrypoints()`. This loads all registered kernel providers.
+   :meth:`.KernelFinder.from_entrypoints()`.
+   This loads all registered kernel providers.
 
-2. You can also provide a list of :class:`KernelProvider <jupyter_kernel_mgmt.discovery.KernelProviderBase>`
-instances via KernelFinder's initializer: :meth:`KernelFinder(providers) <jupyter_kernel_mgmt.discovery.KernelFinder>`.
-This loads only those instances provided.
+2. You can also provide a list of :doc:`kernel provider <kernel_providers>`
+   instances to KernelFinder's constructor.
+   This loads only those instances provided.
 
 Once an instance of :class:`KernelFinder <jupyter_kernel_mgmt.discovery.KernelFinder>` has
 been created, kernels can be discovered and launched via KernelFinder's
@@ -25,42 +27,41 @@ instance methods, :meth:`find_kernels() <.KernelFinder.find_kernels>` and
 Finding kernels
 ===============
 
-The set of currently available kernel types are discovered using KernelFinder's
+Available kernel types are discovered using KernelFinder's
 :meth:`.KernelFinder.find_kernels()` method.  This method is a generator that walks
 the set of loaded kernel providers calling each of their
 :meth:`KernelProvider.find_kernels() <.KernelProviderBase.find_kernels()>` methods
 yielding each entry.
 
-Each entry, commonly referred to as a :ref:`kernel specification <kernelspecs>`, is a dictionary
-consisting of the fields necessary to describe the associated kernel and assist users in their
-selection.  Some providers may return additional information in the `metadata` stanza of the result.
-
+Each kernel type has an ID (e.g. ``spec/python3``) and a dictionary containing
+information to help a program or a user select an appropriate kernel.
+Different providers may include different metadata in this dictionary.
 
 .. _kernelspecs:
 
 Kernel Specifications
 ---------------------
 
-Prior to the advent of kernel providers, and still applicable to providers built using
-:class:`KernelSpecProvider <jupyter_kernel_mgmt.discovery.KernelSpecProvider>`, a kernel identifies itself to an
-IPython-compatible application by creating a directory, the name of which
-is used as an identifier for the kernel. These may be created in a number of
-locations:
+The main built-in kernel provider,
+:class:`~.jupyter_kernel_mgmt.discovery.KernelSpecProvider`,
+looks for kernels described by files in certain specific folders.
+Each kernel is described by one directory, and the name of the directory is
+used in its kernel type ID.
+These kernel spec directories may be in a number of locations:
 
-+------------+--------+-------------------------------------------+-----------------------------------+
-| Provider Id|  Type  | Unix                                      | Windows                           |
-+============+========+===========================================+===================================+
-|            | System | ``/usr/share/jupyter/kernels``            | ``%PROGRAMDATA%\jupyter\kernels`` |
-|``spec``    |        |                                           |                                   |
-|            |        | ``/usr/local/share/jupyter/kernels``      |                                   |
-+------------+--------+-------------------------------------------+-----------------------------------+
-|            | User   | ``~/.local/share/jupyter/kernels`` (Linux)| ``%APPDATA%\jupyter\kernels``     |
-|``spec``    |        |                                           |                                   |
-|            |        | ``~/Library/Jupyter/kernels`` (Mac)       |                                   |
-+------------+--------+-------------------------------------------+-----------------------------------+
-|``pyimport``|  Env   |                         ``{sys.prefix}/share/jupyter/kernels``                |
-+------------+--------+-------------------------------------------+-----------------------------------+
-
++--------+-------------------------------------------+-----------------------------------+
+|  Type  | Unix                                      | Windows                           |
++========+===========================================+===================================+
+| System | ``/usr/share/jupyter/kernels``            | ``%PROGRAMDATA%\jupyter\kernels`` |
+|        |                                           |                                   |
+|        | ``/usr/local/share/jupyter/kernels``      |                                   |
++--------+-------------------------------------------+-----------------------------------+
+| User   | ``~/.local/share/jupyter/kernels`` (Linux)| ``%APPDATA%\jupyter\kernels``     |
+|        |                                           |                                   |
+|        | ``~/Library/Jupyter/kernels`` (Mac)       |                                   |
++--------+-------------------------------------------+-----------------------------------+
+|  Env   |                         ``{sys.prefix}/share/jupyter/kernels``                |
++--------+-------------------------------------------+-----------------------------------+
 
 
 The user location takes priority over the system locations, and the case of the
@@ -139,6 +140,18 @@ fields in `kernel.json` files:
 However, whether a provider exposes information used during their kernel's
 launch is entirely up to the provider.
 
+IPython kernel provider
+-----------------------
+
+A second built-in kernel provider,
+:class:`~.jupyter_kernel_mgmt.discovery.IPykernelProvider`, identifies if
+``ipykernel`` is importable by the same Python the frontend is running on.
+If so, it provides exactly one kernel type, ``pyimport/kernel``, which runs the
+IPython kernel in that same Python environment.
+
+This may be functionally a duplicate of a kernel type discovered through an
+:ref:`installed kernelspec <kernelspecs>`.
+
 
 Launching kernels
 =================
@@ -164,10 +177,9 @@ KernelFinder's launch method then locates the provider and calls the specific ke
 :py:meth:`KernelFinder.launch(name, cwd=None, launch_params=None) <jupyter_kernel_mgmt.discovery.KernelProviderBase.launch>`
 takes two additional (and optional) arguments.
 
-**cwd** (optional) specifies the current working directory relative to the notebook.  Use of this value
-is up to the provider.  For :class:`KernelSpecProvider-based <.KernelSpecProvider>` kernels, the kernel
-process will use this value as the working directory for the subsequent Popen subprocess.  Other providers
-may choose to ignore ``cwd`` entirely.
+**cwd** (optional) specifies the current working directory relative to the notebook.
+Use of this value is up to the provider, as some kinds of kernels may not see
+the same filesystem as the process launching them.
 
 **launch_params** (optional) specifies a dictionary of provider-specific name/value pairs that can can
 be used during the kernel's launch.  What parameters are used can also be specified in the form of JSON
