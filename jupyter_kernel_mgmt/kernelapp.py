@@ -8,6 +8,8 @@ from traitlets import Unicode
 from . import __version__
 from .discovery import KernelFinder
 from .client import BlockingKernelClient
+from .util import run_sync
+
 
 class KernelApp(JupyterApp):
     """Launch a kernel by kernel type ID
@@ -45,16 +47,17 @@ class KernelApp(JupyterApp):
 
     def shutdown(self, signo):
         self.log.info('Shutting down on signal %d' % signo)
-        client = BlockingKernelClient(self.manager.get_connection_info(),
+        client = BlockingKernelClient(self.connection_info,
                                       manager=self.manager)
+        client.wait_for_ready()
         client.shutdown_or_terminate()
         client.close()
         self.loop.stop()
 
     def log_connection_info(self):
-        cf = self.manager.connection_file
-        self.log.info('Connection file: %s', cf)
-        self.log.info("To connect a client: --existing %s", os.path.basename(cf))
+        cf = self.connection_info
+        self.log.info('Connection information: %s', cf)
+        #self.log.info("To connect a client: --existing %s", os.path.basename(cf))
 
     def _record_started(self):
         """For tests, create a file to indicate that we've started
@@ -68,13 +71,13 @@ class KernelApp(JupyterApp):
 
     def start(self):
         self.log.info('Starting kernel %r', self.kernel_name)
-        self.manager = self.kernel_finder.launch(self.kernel_name)
+        self.connection_info, self.manager = run_sync(self.kernel_finder.launch(self.kernel_name))
         try:
             self.log_connection_info()
             self.setup_signals()
             self.loop.start()
         finally:
-            self.manager.cleanup()
+            run_sync(self.manager.cleanup())
 
 
 main = KernelApp.launch_instance
