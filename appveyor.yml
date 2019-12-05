@@ -1,5 +1,8 @@
 environment:
   matrix:
+    - CONDA_PY: 35
+      CONDA_PY_SPEC: 3.5
+      CONDA_INSTALL_LOCN: "C:\\Miniconda36-x64"
     - CONDA_PY: 36
       CONDA_PY_SPEC: 3.6
       CONDA_INSTALL_LOCN: "C:\\Miniconda36-x64"
