@@ -47,7 +47,7 @@ class run_kernel_async:
 
 
 def start_kernel_blocking(
-        name, *, cwd=None, launch_params=None, finder=None, startup_timeout=60,
+        name, *, cwd=None, launch_params=None, finder=None, startup_timeout=60
 ):
     """Start a kernel by kernel type name, return (manager, blocking client)"""
     kf = finder or KernelFinder.from_entrypoints()
