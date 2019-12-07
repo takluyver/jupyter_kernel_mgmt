@@ -4,6 +4,11 @@
 Changes in Jupyter Kernel Mgmt
 ==============================
 
+0.5.1
+-----
+
+- Enable support for python 3.5
+
 0.5.0
 -----
 
