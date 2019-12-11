@@ -58,6 +58,13 @@ class IOLoopKernelClient(KernelClient):
         if DEBUG_LOGGING:
             self.add_handler(self._debug_log, {'iopub', 'shell', 'stdin', 'control'})
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
     def close(self):
         """Close the client's sockets & streams.
 
