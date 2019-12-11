@@ -42,6 +42,7 @@ class KernelApp:
             await client.shutdown_or_terminate()
 
     def record_connection_info(self, conn_info):
+        log.info("Connection info: %s", conn_info)
         runtime_dir = jupyter_runtime_dir()
         ensure_dir_exists(runtime_dir)
         fname = os.path.join(runtime_dir, 'kernel-%s.json' % uuid4())
