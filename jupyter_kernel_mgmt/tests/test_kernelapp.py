@@ -27,7 +27,7 @@ def test_kernelapp_lifecycle(setup_env):
     startup_dir = mkdtemp()
     started = os.path.join(startup_dir, 'started')
     try:
-        p = _launch({'JUPYTER_CLIENT_TEST_RECORD_STARTUP_PRIVATE': started,
+        p = _launch({'JKM_TEST_RECORD_STARTUP_PRIVATE': started,
                     })
         # Wait for start
         for _ in range(WAIT_TIME * POLL_FREQ):

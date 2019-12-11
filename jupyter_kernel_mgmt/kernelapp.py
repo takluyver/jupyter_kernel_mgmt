@@ -63,7 +63,7 @@ class KernelApp:
 
         Do not rely on this except in our own tests!
         """
-        fn = os.environ.get('JUPYTER_CLIENT_TEST_RECORD_STARTUP_PRIVATE')
+        fn = os.environ.get('JKM_TEST_RECORD_STARTUP_PRIVATE')
         if fn is not None:
             with open(fn, 'wb'):
                 pass
