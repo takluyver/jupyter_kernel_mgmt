@@ -30,11 +30,13 @@ class KernelApp:
         if os.name == 'nt':
             return
 
-        def shutdown_handler(signo, frame):
+        def shutdown_handler(signo):
             log.info('Shutting down on signal %d' % signo)
             self.shutdown_event.set()
+
+        loop = asyncio.get_event_loop()
         for sig in [signal.SIGTERM, signal.SIGINT]:
-            signal.signal(sig, shutdown_handler)
+            loop.add_signal_handler(sig, shutdown_handler, sig)
 
     async def shutdown(self, conn_info, manager):
         log.info("Shutting down kernel...")
