@@ -39,11 +39,13 @@ def test_kernelapp_lifecycle(setup_env):
                                  .format(WAIT_TIME))
 
         # Connection file should be there by now
+        # TODO: now there are 2 connection files (1 to launch the kernel, 1 to
+        # advertise it). Clean this up when we have a better solution.
         files = os.listdir(runtime_dir)
-        assert len(files) == 1
-        cf = files[0]
-        assert cf.startswith('kernel')
-        assert cf.endswith('.json')
+        assert len(files) == 2
+        for cf in files:
+            assert cf.startswith('kernel')
+            assert cf.endswith('.json')
 
         # since the connection file is no longer displayed by the application
         # (connection info is dumped instead), we'll open the connection file
