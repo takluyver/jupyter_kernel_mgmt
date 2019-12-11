@@ -53,6 +53,7 @@ class KernelApp:
             f.write(json.dumps(conn_info, indent=2))
 
         log.info("To connect a client: --existing %s", os.path.basename(fname))
+        return fname
 
     def _record_started(self):
         """For tests, create a file to indicate that we've started
@@ -70,7 +71,7 @@ class KernelApp:
         conn_info, mgr = await kernel_finder.launch(self.kernel_name)
         try:
             self._record_started()
-            self.record_connection_info(conn_info)
+            conn_file = self.record_connection_info(conn_info)
             self.setup_signals()
             await asyncio.wait(
                 [self.shutdown_event.wait(), mgr.wait()],
@@ -80,6 +81,11 @@ class KernelApp:
             if await mgr.is_alive():
                 await self.shutdown(conn_info, mgr)
             await mgr.cleanup()
+
+        try:
+            os.unlink(conn_file)
+        except FileNotFoundError:
+            pass
 
     def run(self):
         asyncio.get_event_loop().run_until_complete(self.run_in_loop())
