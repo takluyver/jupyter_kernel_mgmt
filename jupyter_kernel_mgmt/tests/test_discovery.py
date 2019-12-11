@@ -192,6 +192,7 @@ async def test_kernel_spec_provider(setup_test):
     assert isinstance(manager, KernelManager)
     # this actually starts a kernel, so let's make sure its terminated
     await manager.kill()
+    await manager.cleanup()
 
 
 async def test_kernel_spec_provider_subclass(setup_test):
@@ -256,6 +257,7 @@ async def test_kernel_launch_params(caplog, setup_test):
 
         # this actually starts a tail -f command, so let's make sure its terminated
         await manager.kill()
+        await manager.cleanup()
 
 
 async def test_load_config(setup_test):
