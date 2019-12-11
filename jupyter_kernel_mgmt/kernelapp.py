@@ -73,8 +73,8 @@ class KernelApp:
         kernel_finder = KernelFinder.from_entrypoints()
         conn_info, mgr = await kernel_finder.launch(self.kernel_name)
         try:
-            self._record_started()
             conn_file = self.record_connection_info(conn_info)
+            self._record_started()
             self.setup_signals()
             await asyncio.wait(
                 [self.shutdown_event.wait(), mgr.wait()],
