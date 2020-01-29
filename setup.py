@@ -63,7 +63,7 @@ setup_args = dict(
     install_requires = [
         'tornado>=5',
         'traitlets>=4.2.1',
-        'jupyter_core>=4.6.0',
+        'jupyter_core>=4.6.1',
         'jupyter_protocol',
         'six',
         'pyzmq>=17',
