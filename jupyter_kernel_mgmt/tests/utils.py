@@ -1,11 +1,11 @@
-"""Testing utils for jupyter_client tests
+"""Testing utils for jupyter_client tests"""
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
 
-"""
 import asyncio
 import json
 import os
 pjoin = os.path.join
-import sys
 
 
 def execute(code='', kc=None, **kwargs):

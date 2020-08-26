@@ -1,15 +1,15 @@
-from abc import ABCMeta, abstractmethod
+"""Kernel Provider/Discovery Implementations"""
+
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
 import asyncio
 import entrypoints
 import logging
-import six
-from tornado.concurrent import Future
+
+from abc import ABCMeta, abstractmethod
+from json import JSONDecodeError
 from traitlets.config import Application
-try:
-    from json import JSONDecodeError
-except ImportError:
-    # JSONDecodeError is new in Python 3.5, so while we support 3.4:
-    JSONDecodeError = ValueError
 
 from .kernelspec import KernelSpecManager, KernelSpec
 from .subproc import SubprocessKernelLauncher
@@ -18,7 +18,7 @@ from .util import run_sync
 log = logging.getLogger(__name__)
 
 
-class KernelProviderBase(six.with_metaclass(ABCMeta, object)):
+class KernelProviderBase(metaclass=ABCMeta):
     id = None  # Should be a short string identifying the provider class.
 
     @abstractmethod

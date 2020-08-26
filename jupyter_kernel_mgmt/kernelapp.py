@@ -1,3 +1,7 @@
+"""Kernel Application"""
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
 import asyncio
 import argparse
 import json
@@ -95,18 +99,15 @@ class KernelApp:
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(
-        'jupyter-kernel', description="Run a kernel by kernel type ID"
-    )
+    ap = argparse.ArgumentParser('jupyter-kernel', description="Run a kernel by kernel type ID")
     ap.add_argument('--version', action='version', version=__version__)
-    ap.add_argument('--kernel', default='pyimport/kernel',
-        help="Kernel type to launch"
-    )
+    ap.add_argument('--kernel', default='pyimport/kernel', help="Kernel type to launch")
     args = ap.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO)
 
     return KernelApp(args.kernel).run()
+
 
 if __name__ == '__main__':
     main()

@@ -1,8 +1,14 @@
 """High-level APIs"""
+
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
 from contextlib import contextmanager
+
 from .client import IOLoopKernelClient, BlockingKernelClient
 from .util import run_sync
 from .discovery import KernelFinder
+
 
 async def start_kernel_async(name, cwd=None, launch_params=None, finder=None):
     """Start a kernel by kernel type name, return (manager, async client)"""
@@ -61,6 +67,7 @@ def start_kernel_blocking(
         raise
 
     return km, kc
+
 
 @contextmanager
 def run_kernel_blocking(name, **kwargs):

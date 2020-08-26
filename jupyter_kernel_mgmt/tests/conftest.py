@@ -1,3 +1,8 @@
+"""pytest configuration methods"""
+
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
 import os
 import pytest
 from ..util import _init_asyncio_patch
@@ -16,4 +21,3 @@ def setup_env(tmpdir, monkeypatch, asyncio_patch):
     monkeypatch.setenv('JUPYTER_DATA_DIR', pjoin(tmpdir.dirname, 'jupyter_data'))
     monkeypatch.setenv('JUPYTER_RUNTIME_DIR', pjoin(tmpdir.dirname, 'jupyter_runtime'))
     monkeypatch.setenv('IPYTHONDIR', pjoin(tmpdir.dirname, 'ipython'))
-

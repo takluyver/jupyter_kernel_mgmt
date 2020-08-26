@@ -1,5 +1,4 @@
-"""Clients built around a tornado IOLoop.
-"""
+"""Clients built around a tornado IOLoop."""
 
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
@@ -11,6 +10,7 @@ from functools import partial, wraps
 from getpass import getpass
 import sys
 from threading import Thread, Event
+
 from tornado.concurrent import Future
 from tornado import gen
 from tornado import ioloop
@@ -343,6 +343,7 @@ class IOLoopKernelClient(KernelClient):
             f = Future()
             f.set_result(None)
             return f
+
 
 def waiting_for_reply(method):
     @wraps(method)

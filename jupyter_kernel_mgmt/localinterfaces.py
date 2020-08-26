@@ -29,6 +29,7 @@ def _uniq_stable(elems):
     seen = set()
     return [x for x in elems if x not in seen and not seen.add(x)]
 
+
 def _get_output(cmd):
     """Get output of a command, raising IOError if it fails"""
     startupinfo = None
@@ -41,6 +42,7 @@ def _get_output(cmd):
         raise IOError("Failed to run %s: %s" % (cmd, stderr.decode('utf8', 'replace')))
     return stdout.decode('utf8', 'replace')
 
+
 def _only_once(f):
     """decorator to only run a function once"""
     f.called = False
@@ -52,6 +54,7 @@ def _only_once(f):
         return ret
     return wrapped
 
+
 def _requires_ips(f):
     """decorator to ensure load_ips has been run before f"""
     def ips_loaded(*args, **kwargs):
@@ -59,9 +62,11 @@ def _requires_ips(f):
         return f(*args, **kwargs)
     return ips_loaded
 
+
 # subprocess-parsing ip finders
 class NoIPAddresses(Exception):
     pass
+
 
 def _populate_from_list(addrs):
     """populate local and public IPs from flat list of all IPs"""
@@ -88,7 +93,9 @@ def _populate_from_list(addrs):
     LOCAL_IPS[:] = _uniq_stable(local_ips)
     PUBLIC_IPS[:] = _uniq_stable(public_ips)
 
+
 _ifconfig_ipv4_pat = re.compile(r'inet\b.*?(\d+\.\d+\.\d+\.\d+)', re.IGNORECASE)
+
 
 def _load_ips_ifconfig():
     """load ip addresses from `ifconfig` output (posix)"""
@@ -120,7 +127,9 @@ def _load_ips_ip():
             addrs.append(blocks[1].split('/')[0])
     _populate_from_list(addrs)
 
+
 _ipconfig_ipv4_pat = re.compile(r'ipv4.*?(\d+\.\d+\.\d+\.\d+)$', re.IGNORECASE)
+
 
 def _load_ips_ipconfig():
     """load ip addresses from `ipconfig` output (Windows)"""
@@ -195,12 +204,14 @@ def _load_ips_gethostbyname():
 
     LOCALHOST = LOCAL_IPS[0]
 
+
 def _load_ips_dumb():
     """Fallback in case of unexpected failure"""
     global LOCALHOST
     LOCALHOST = '127.0.0.1'
     LOCAL_IPS[:] = [LOCALHOST, '0.0.0.0', '']
     PUBLIC_IPS[:] = []
+
 
 @_only_once
 def _load_ips(suppress_exceptions=True):
@@ -253,20 +264,24 @@ def local_ips():
     """return the IP addresses that point to this machine"""
     return LOCAL_IPS
 
+
 @_requires_ips
 def public_ips():
     """return the IP addresses for this machine that are visible to other machines"""
     return PUBLIC_IPS
+
 
 @_requires_ips
 def localhost():
     """return ip for localhost (almost always 127.0.0.1)"""
     return LOCALHOST
 
+
 @_requires_ips
 def is_local_ip(ip):
     """does `ip` point to this machine?"""
     return ip in LOCAL_IPS
+
 
 @_requires_ips
 def is_public_ip(ip):
