@@ -6,14 +6,11 @@
 from __future__ import absolute_import
 
 import asyncio
-import logging
 import os
 import signal
 import subprocess
 import sys
 import uuid
-
-log = logging.getLogger(__name__)
 
 from traitlets.log import get_logger as get_app_logger
 from ..managerabc import KernelManagerABC

@@ -3,6 +3,7 @@
 
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
+
 from tornado import ioloop, gen
 from traitlets.config.configurable import LoggingConfigurable
 from traitlets import (
@@ -10,6 +11,7 @@ from traitlets import (
 )
 
 from .discovery import KernelFinder
+
 
 class KernelRestarterBase(LoggingConfigurable):
     """Monitor and autorestart a kernel."""

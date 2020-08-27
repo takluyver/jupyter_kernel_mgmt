@@ -16,7 +16,7 @@ from setuptools.command.bdist_egg import bdist_egg
 
 v = sys.version_info
 if v[:2] < (3, 5):
-    error = "ERROR: %s requires Python version 3.5 or above." % name
+    error = "ERROR: %s requires Python version 3.6 or above." % name
     print(error, file=sys.stderr)
     sys.exit(1)
 
@@ -65,15 +65,15 @@ setup_args = dict(
         'traitlets>=4.2.1',
         'jupyter_core>=4.6.1',
         'jupyter_protocol',
-        'six',
         'pyzmq>=17',
         'python-dateutil>=2.1',
         'entrypoints',
+        'pywin32>=1.0; sys_platform == "win32"',
     ],
     extras_require   = {
-        'test': ['ipykernel', 'ipython', 'pytest', 'pytest-asyncio', 'async_generator'],
+        'test': ['ipykernel', 'ipython', 'pytest>=5.4', 'pytest-asyncio', 'async_generator'],
     },
-    python_requires = ">=3.5",
+    python_requires = ">=3.6",
     cmdclass         = {
         'bdist_egg': bdist_egg if 'bdist_egg' in sys.argv else bdist_egg_disabled,
     },

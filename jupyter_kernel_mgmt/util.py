@@ -20,7 +20,7 @@ def run_sync(coro_method):
 
 
 def _init_asyncio_patch():
-    if sys.platform.startswith("win"): # and sys.version_info >= (3, 8):
+    if sys.platform.startswith("win"):  # and sys.version_info >= (3, 8):
         # Windows specific event-loop policy.  Although WindowsSelectorEventLoop is the current
         # default event loop priot to Python 3.8, WindowsProactorEventLoop becomes the default
         # in Python 3.8.  However, using WindowsProactorEventLoop fails during creation of

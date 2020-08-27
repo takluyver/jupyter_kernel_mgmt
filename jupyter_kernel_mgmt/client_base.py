@@ -39,7 +39,7 @@ class ManagerClient(KernelManagerABC):
             if reply.parent_header['msg_id'] == msg.header['msg_id']:
                 return reply.content['alive']
 
-    def wait(self, timeout):
+    def wait(self, timeout=None):
         """Wait for the kernel process to exit.
 
         If timeout is a number, it is a maximum time in seconds to wait.
@@ -116,7 +116,7 @@ class KernelClient(object):
     """
     hb_monitor = None
 
-    def __init__(self, connection_info, manager=None, use_heartbeat=True):
+    def __init__(self, connection_info, manager=None, using_heartbeat=True):
         self.connection_info = connection_info
         self.messaging = ClientMessaging(connection_info)
         if (manager is None) and 'nanny_control_port' in connection_info:
@@ -392,4 +392,3 @@ class KernelClient(object):
     @property
     def stdin_socket(self):
         return self.messaging.sockets['stdin']
-

@@ -1,9 +1,11 @@
+"""KernelManager Abstract Base Class Implementation"""
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
 from abc import ABCMeta, abstractmethod
-import asyncio
-import six
 
 
-class KernelManagerABC(six.with_metaclass(ABCMeta, object)):
+class KernelManagerABC(metaclass=ABCMeta):
     """
     Abstract base class from which all KernelManager classes are derived.
     """

@@ -1,24 +1,26 @@
-"""Machinery for launching a kernel in a local subprocess.
-"""
+"""Machinery for launching a kernel in a local subprocess."""
+
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
 import asyncio
-from binascii import b2a_hex
-from contextlib import contextmanager
 import errno
 import json
 import os
 import re
 import socket
 import stat
-from subprocess import PIPE, Popen
 import sys
-from traitlets.log import get_logger as get_app_logger
 import warnings
 
+from binascii import b2a_hex
 from jupyter_core.paths import jupyter_runtime_dir, secure_write
 from jupyter_core.utils import ensure_dir_exists
+from subprocess import PIPE, Popen
+from traitlets.log import get_logger as get_app_logger
+
 from ..localinterfaces import localhost, is_local_ip, local_ips
 from .manager import KernelManager
-from ..util import run_sync
 
 port_names = ['shell_port', 'iopub_port', 'stdin_port', 'control_port', 'hb_port']
 
@@ -238,7 +240,7 @@ class SubprocessKernelLauncher:
 
             # Prevent creating new console window on pythonw
             if redirect_out:
-                kwargs['creationflags'] = kwargs.setdefault('creationflags', 0) | 0x08000000 # CREATE_NO_WINDOW
+                kwargs['creationflags'] = kwargs.setdefault('creationflags', 0) | 0x08000000  # CREATE_NO_WINDOW
 
             # Avoid closing the above parent and interrupt handles.
             # close_fds is True by default on Python >=3.7
@@ -343,4 +345,3 @@ def prepare_interrupt_event(env, interrupt_event=None):
         # deprecated old env name:
         env["IPY_INTERRUPT_EVENT"] = env["JPY_INTERRUPT_EVENT"]
         return interrupt_event
-

@@ -1,15 +1,21 @@
+"""KernelNanny implementation"""
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
+
 import json
+import os
+import sys
+
 from jupyter_core.paths import jupyter_runtime_dir
 from jupyter_core.utils import ensure_dir_exists
 from jupyter_protocol.sockets import NannyMessaging
 from jupyter_protocol.messages import Message
-import os
-import sys
 from tornado.ioloop import PeriodicCallback, IOLoop
 from zmq.eventloop.zmqstream import ZMQStream
 
 from .discovery import KernelFinder
 from .subproc.launcher import set_sticky_bit
+
 
 class KernelNanny:
     def __init__(self, connection_info, manager):
@@ -68,6 +74,7 @@ class KernelNanny:
         self.messaging.send('nanny_events', msg)
         IOLoop.current().stop()
 
+
 def main():
     kf = KernelFinder.from_entrypoints()
     print("Launching kernel", sys.argv[1])
@@ -84,6 +91,7 @@ def main():
         loop.close()
         mgr.cleanup()
         nanny.cleanup()
+
 
 if __name__ == '__main__':
     main()

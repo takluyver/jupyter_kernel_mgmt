@@ -10,15 +10,11 @@ import re
 import shutil
 import warnings
 
-pjoin = os.path.join
-
-from traitlets import (
-    HasTraits, List, Unicode, Dict, CaselessStrEnum
-)
-
+from traitlets import (HasTraits, List, Unicode, Dict, CaselessStrEnum)
 from traitlets.log import get_logger as get_app_logger
-
 from jupyter_core.paths import jupyter_data_dir, jupyter_path, SYSTEM_JUPYTER_PATH
+
+pjoin = os.path.join
 
 
 DEFAULT_KERNEL_FILE = 'kernel.json'
@@ -245,8 +241,7 @@ class KernelSpecManager:
         kernel_dir = os.path.dirname(destination)
         if kernel_dir not in self.kernel_dirs:
             self.log.warning("Installing to %s, which is not in %s. The kernelspec may not be found.",
-                        kernel_dir, self.kernel_dirs,
-            )
+                             kernel_dir, self.kernel_dirs)
 
         if os.path.isdir(destination):
             self.log.info('Removing existing kernelspec in %s', destination)

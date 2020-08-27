@@ -5,13 +5,12 @@
 
 from __future__ import print_function
 
-from subprocess import Popen, PIPE
-import sys
 import time
 
 from ipykernel.displayhook import ZMQDisplayHook
 from ipykernel.kernelbase import Kernel
 from ipykernel.kernelapp import IPKernelApp
+from subprocess import Popen, PIPE
 
 
 class SignalTestKernel(Kernel):
@@ -37,7 +36,7 @@ class SignalTestKernel(Kernel):
             self.children.append(child)
             reply['user_expressions']['pid'] = self.children[-1].pid
         elif code == 'check':
-            reply['user_expressions']['poll'] = [ child.poll() for child in self.children ]
+            reply['user_expressions']['poll'] = [child.poll() for child in self.children]
         elif code == 'sleep':
             try:
                 time.sleep(10)
@@ -59,11 +58,14 @@ class SignalTestKernel(Kernel):
         """
         return super(SignalTestKernel, self).kernel_info_request(*args, **kwargs)
 
+
 class SignalTestApp(IPKernelApp):
     kernel_class = SignalTestKernel
+
     def init_io(self):
         # Overridden to disable stdout/stderr capture
         self.displayhook = ZMQDisplayHook(self.session, self.iopub_socket)
+
 
 if __name__ == '__main__':
     # make startup artificially slow,
